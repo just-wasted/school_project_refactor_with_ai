@@ -25,21 +25,29 @@ def load_system_prompt():
             return f.read().strip()
     except FileNotFoundError:
         # Fallback-Prompt falls Datei nicht gefunden
-        return """Du bist ein Code-Refactoring-Spezialist. Analysiere Code und gib REFACTORING-VORSCHLÄGE mit ECHTEN MUSTERN als JSON zurück.
+        return """Du bist ein Code-Refactoring-Spezialist. Refaktoriere ITERATIV mit EINER MINIMALEN ÄNDERUNG PRO SCHRITT.
+
+HÄRTESTE REGELN:
+- PRO VORSCHLAG NUR EINE ÄNDERUNG
+- JEDER SCHRITT MUSS DEN CODE IN GÜLTIGEM ZUSTAND HINTERLASSEN
+
+LOCATION-REGELN:
+- start_line MUSS <= end_line sein
+- Zum ERSETZEN: location = {start_line: X, end_line: Y} wo X <= Y
+- Zum EINFÜGEN: location = {start_line: N, end_line: N} (Einfügung nach Zeile N)
+- Location MUSS EXAKT sein - KEINE zusätzlichen Zeilen!
+
+REFACTORING-MUSTER (iterativ):
+- Long Method: Schritt 1 = Methode umschreiben, Schritt 2+ = Helfermethoden einfügen
+- Duplicate Code: Schritt 1 = Neue Methode, Schritt 2+ = Aufrufe ersetzen
+- Magic Numbers: Schritt 1 = Konstante definieren, Schritt 2 = Verwenden
+- Too Many Parameters: Schritt 1+ = Parameter-Object
 
 REGELN:
-1. Wende EIN Refactoring-Muster pro Vorschlag an (Extract Method, Introduce Constant, etc.)
-2. location muss EXAKT sein: start_line/end_line = genaue Zeilen der Methode
-3. suggestion MUSS Code-Block ```python...``` mit refaktoriertem Code enthalten
-4. NUR Code im Location-Bereich ändern
-
-REFACTORING-MUSTER:
-- Long Method: Teile in 3-5 kleinere Methoden auf
-- Duplicate Code: Extrahiere gemeinsame Logik in eine Methode
-- Magic Numbers: Ersetze durch Konstanten/Config
-- Too Many Parameters: Verwende Parameter-Object
-
-VERBOTEN: Klassendefinitionen, Imports, andere Methoden, leere suggestions, kosmetische Änderungen
+- suggestion MUSS Code-Block ```python...``` enthalten
+- NUR Code im Location-Bereich ändern
+- KEINE Klassendefinitionen, Imports oder fremde Methoden
+- Behavior Preservation: Externes Verhalten darf sich NICHT ändern
 
 JSON-Format:
 {"file":"...","language":"Python","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":M},"description":"...","severity":"high|medium|low","suggestion":"```python\\n...\\n```","reason":"...","impact":"readability|maintainability|testability|performance"}],"stats":{"total_smells":X,"high":A,"medium":B,"low":C,"coverage":"Y%"}}"""
@@ -184,6 +192,10 @@ def show_diff(original, modified, smell):
     start_line = smell.get('location', {}).get('start_line', 1) - 1
     end_line = smell.get('location', {}).get('end_line', 1) - 1
     
+    # Korrigiere falls start_line > end_line (Einfügung)
+    if start_line > end_line:
+        start_line = end_line
+    
     print("\n" + "=" * 70)
     print(f"VORSCHLAG: {smell.get('type', 'unknown')}")
     print(f"Beschreibung: {smell.get('description', '')}")
@@ -197,37 +209,34 @@ def show_diff(original, modified, smell):
         print("\nAktueller Code:")
         print("-" * 70)
         
-        # Finde den ersten nicht-leeren, nicht-Kommentar Block im Bereich
-        # um nur den relevanten Code anzuzeigen
-        code_start = None
-        code_end = None
-        
-        for i in range(start_line, end_line + 1):
-            if i < len(lines):
-                stripped = lines[i].strip()
-                # Überspringe leere Zeilen und Kommentare
-                if stripped and not stripped.startswith('#') and not stripped.startswith('"""') and not stripped.startswith("'''"):
-                    if code_start is None:
-                        code_start = i
-                    code_end = i
-        
-        # Falls wir Code gefunden haben, zeige nur diesen Block
-        if code_start is not None:
-            start_line = code_start
-            end_line = code_end
-        
-        # Zeige nur die Zeilen im Bereich start_line bis end_line
-        current_code = []
-        for i in range(start_line, end_line + 1):
-            if i < len(lines):
-                # Absolute Zeilennummer (i+1 weil lines 0-indexed ist)
-                current_code.append(f"{i+1:4d}: {lines[i]}")
-        
-        if has_bat():
-            display_code_with_bat('\n'.join(current_code), language="python")
+        # Für Einfügungen (start_line == end_line) - zeige Kontext um die Einfügestelle
+        if start_line == end_line:
+            # Zeige 2 Zeilen Kontext vor und nach der Einfügestelle
+            context_start = max(0, start_line - 2)
+            context_end = min(len(lines) - 1, start_line + 2)
+            
+            current_code = []
+            for i in range(context_start, context_end + 1):
+                marker = ">>> " if i == start_line else "    "
+                current_code.append(f"{marker}{i+1:4d}: {lines[i]}")
+            
+            if has_bat():
+                display_code_with_bat('\n'.join(current_code), language="python")
+            else:
+                for line in current_code:
+                    print(line)
         else:
-            for line in current_code:
-                print(line)
+            # Für Ersatz - zeige nur die Zeilen im Location-Bereich
+            current_code = []
+            for i in range(start_line, end_line + 1):
+                if i < len(lines):
+                    current_code.append(f"{i+1:4d}: {lines[i]}")
+            
+            if has_bat():
+                display_code_with_bat('\n'.join(current_code), language="python")
+            else:
+                for line in current_code:
+                    print(line)
         print("-" * 70)
     
     # Zeige die Vorschläge
@@ -263,7 +272,7 @@ def show_diff(original, modified, smell):
             fromfile="original",
             tofile="modified",
             lineterm="",
-            n=0
+            n=3
         )
         # Generiere den Diff als String mit Zeilenumbrüchen
         diff_lines = []
@@ -277,7 +286,6 @@ def show_diff(original, modified, smell):
                 else:
                     diff_lines.append('+++ modified')
             else:
-                # EntferneExisting newlines und füge sie später manuell hinzu
                 diff_lines.append(line.rstrip('\n'))
         
         diff_text = '\n'.join(diff_lines)
@@ -312,8 +320,8 @@ def apply_interactive_finalize(modified_code, applied_count, output_file):
 def apply_smell(code, smell):
     """Wendet einen einzelnen Smell-Vorschlag auf den Code an.
     
-    Ersetzt den Code im Location-Bereich (start_line bis end_line) durch den suggestion-Code.
-    Der suggestion-Code kann mehrere Methoden enthalten (z.B. bei Extract Method).
+    Ersetzt den Code im Location-Bereich (start_line bis end_line) durch den suggestion-Code
+    oder fügt neuen Code ein, wenn start_line == end_line (Einfügung).
     """
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
@@ -324,22 +332,34 @@ def apply_smell(code, smell):
     # Extrahiere Code-Blöcke aus dem suggestion
     code_blocks = extract_code_blocks(suggestion)
     
-    if start_line >= 0 and end_line < len(lines):
-        if code_blocks:
-            refactored_code = code_blocks[0]
-            
-            # Ersetze den Code von start_line bis end_line durch den refactored_code
-            new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
+    # Falls start_line > end_line, korrigiere zu Einfügung nach end_line
+    if start_line > end_line:
+        start_line = end_line
+    
+    # Hole den tatsächlichen Code aus dem suggestion
+    if code_blocks:
+        refactored_code = code_blocks[0]
+    else:
+        refactored_code = suggestion
+    
+    # Fall 1: Einfügung (start_line == end_line)
+    if start_line == end_line:
+        # Füge nach der Zeile start_line ein
+        if start_line >= 0 and start_line <= len(lines):
+            new_lines = lines[:start_line + 1] + [refactored_code] + lines[start_line + 1:]
             return '\n'.join(new_lines)
         else:
-            # Falls kein Code-Block, verwende suggestion direkt
-            new_lines = lines[:start_line] + [suggestion] + lines[end_line + 1:]
-            return '\n'.join(new_lines)
+            # Einfügung am Anfang
+            return refactored_code + '\n' + code
     
-    # Falls die Location außerhalb des Codes liegt, füge den Code am Ende hinzu
-    if code_blocks:
-        return code + '\n' + code_blocks[0]
-    return code + '\n' + suggestion
+    # Fall 2: Ersatz (start_line < end_line)
+    if start_line >= 0 and end_line < len(lines):
+        # Ersetze den Code von start_line bis end_line durch den refactored_code
+        new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
+        return '\n'.join(new_lines)
+    
+    # Fall 3: Location außerhalb des Codes - füge am Ende hinzu
+    return code + '\n' + refactored_code
 
 
 def apply_interactive(code, smells, output_file=None):
@@ -351,7 +371,7 @@ def apply_interactive(code, smells, output_file=None):
     modified_code = code
     applied_count = 0
     
-    for smell in smells:
+    for i, smell in enumerate(smells):
         proposed_code = apply_smell(modified_code, smell)
         show_diff(modified_code, proposed_code, smell)
         
@@ -364,12 +384,14 @@ def apply_interactive(code, smells, output_file=None):
             elif response in ('n', 'no'):
                 break
             elif response in ('a', 'all'):
+                # Wende aktuellen Vorschlag an
                 modified_code = proposed_code
                 applied_count += 1
-                for remaining_smell in smells[smells.index(smell) + 1:]:
+                # Wende alle verbleibenden Vorschläge an
+                for remaining_smell in smells[i + 1:]:
                     modified_code = apply_smell(modified_code, remaining_smell)
                     applied_count += 1
-                # Beende die äußere for-Schleife nach "alle"
+                # Beende die Schleife
                 return apply_interactive_finalize(modified_code, applied_count, output_file)
             elif response in ('q', 'quit', 'exit'):
                 print("Abbruch.")
