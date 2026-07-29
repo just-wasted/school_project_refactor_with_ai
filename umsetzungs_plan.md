@@ -44,7 +44,7 @@ Der KI-Refactoring-Agent ist das **Hauptprodukt** des Projekts und agiert als **
 | **Aufgabe** | **Verantwortlich** | **Zeit** | **Ergebnis** |
 |-------------|---------------------|----------|---------------|
 | Projektauftrag analysieren | Team | 0,25 h | Checkliste der Anforderungen |
-| Ollama-Installation und Modellauswahl prüfen | Team | 0,5 h | Entscheidung: Welches lokale Modell? (z. B. qwen3-coder:30b, deepseek-coder:33b) |
+| Ollama-Installation und Modellauswahl prüfen | Team | 0,5 h | Entscheidung: Welches lokale Modell? (z. B. qwen2.5-coder:7b, qwen3-coder:30b) |
 | Systemprompt für Refactoring-Agent entwerfen | Team | 0,25 h | Erste Version des Systemprompts |
 | Git-Repository anlegen und initialisieren | Team | 0,25 h | Lokales Repository mit main-Branch |
 
@@ -224,7 +224,7 @@ Der KI-Refactoring-Agent ist das **Hauptprodukt** des Projekts und agiert als **
 | HTTP-Client | requests (Python) | Ollama-API-Anbindung |
 | Test-Framework | pytest (Python) | Unit-Tests für den Agenten |
 | Linting | pylint, flake8 (Python) | Code-Qualität prüfen |
-| **Lokale KI** | **Ollama + lokale Modelle** (qwen3-coder:30b, deepseek-coder:33b, devstral:24b, magicoder:7b) | Refactoring-Analyse durch KI |
+| **Lokale KI** | **Ollama + lokale Modelle** (qwen2.5-coder:7b, qwen3-coder:30b, deepseek-coder:33b, devstral:24b, magicoder:7b) | Refactoring-Analyse durch KI |
 
 ---
 
@@ -297,13 +297,13 @@ OLLAMA_API_URL = "http://localhost:11434/api/generate"
 
 SYSTEM_PROMPT = """[Hier der Systemprompt aus A]"""
 
-def call_ollama(code: str, model: str = "qwen3-coder:30b", temperature: float = 0.1) -> str:
+def call_ollama(code: str, model: str = "qwen2.5-coder:7b", temperature: float = 0.1) -> str:
     """
     Sendet Anfrage an Ollama-API mit Systemprompt und Code.
     
     Args:
         code: Der zu analysierende Code
-        model: Ollama-Modellname (z. B. 'qwen3-coder:30b', 'deepseek-coder:33b')
+        model: Ollama-Modellname (z. B. 'qwen2.5-coder:7b', 'qwen3-coder:30b', 'deepseek-coder:33b')
         temperature: Kreativität (0.0-1.0, niedrig für deterministischere Ergebnisse)
     
     Returns:
@@ -350,9 +350,9 @@ def main():
     )
     parser.add_argument(
         "--model", 
-        default="qwen3-coder:30b",
-        choices=["qwen3-coder:30b", "qwen3-coder:7b", "deepseek-coder:33b", "deepseek-coder:6.7b", "devstral:24b", "magicoder:7b"],
-        help="Ollama-Modell (default: qwen3-coder:30b)"
+        default="qwen2.5-coder:7b",
+        choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", "deepseek-coder:33b", "deepseek-coder:6.7b", "devstral:24b", "magicoder:7b"],
+        help="Ollama-Modell (default: qwen2.5-coder:7b)"
     )
     parser.add_argument(
         "--temperature", 
@@ -384,8 +384,9 @@ if __name__ == "__main__":
 
 | **Modell** | **Größe** | **Eignung** | **Empfehlung** | **Hardware** |
 |------------|-----------|-------------|----------------|--------------|
-| `qwen3-coder:30b` | ~19GB (Q4_K_M) | ✅✅✅✅✅ **Beste Qualität/GB** | **Beste Wahl für Refactoring** | 24GB RAM / 19GB VRAM |
-| `deepseek-coder:33b` | ~24GB | ✅✅✅✅✅ **95% Code-Korrektheit** | Top für komplexe Aufgaben | 32GB RAM / 24GB VRAM |
+| `qwen2.5-coder:7b` | ~4GB | ✅✅✅✅✅ **Optimiert für Coding** | **Beste Wahl für Refactoring** | 8GB RAM |
+| `qwen3-coder:30b` | ~19GB (Q4_K_M) | ✅✅✅✅✅ **Beste Qualität/GB** | Alternative für komplexe Aufgaben | 24GB RAM / 19GB VRAM |
+| `deepseek-coder:33b` | ~24GB | ✅✅✅✅✅ **95% Code-Korrektheit** | Top für sehr komplexe Aufgaben | 32GB RAM / 24GB VRAM |
 | `devstral:24b` | ~14GB | ✅✅✅✅✅ **Agentic Coding** | 46.8% SWE-Bench Verified | 16GB VRAM |
 | `qwen3-coder:7b` | ~4GB | ✅✅✅✅ **Schnell & effizient** | Gut für CPU-only Setups | 8GB RAM |
 | `magicoder:7b` | ~4GB | ✅✅✅✅ **60+ Tokens/Sek.** | Schnellste Alternative | 8GB RAM |
@@ -397,7 +398,7 @@ if __name__ == "__main__":
 
 ### Vorraussetzungen
 1. **Ollama installiert** (https://ollama.com)
-2. **Modell heruntergeladen** (z. B. `ollama pull qwen3-coder:30b`)
+2. **Modell heruntergeladen** (z. B. `ollama pull qwen2.5-coder:7b`)
 3. **Ollama-Server läuft** (standardmäßig auf `http://localhost:11434`)
 
 ### Installationsanleitung (für README.md)
@@ -405,8 +406,8 @@ if __name__ == "__main__":
 # 1. Ollama installieren
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Refactoring-Modell herunterladen (empfohlen: qwen3-coder:30b oder deepseek-coder:33b)
-ollama pull qwen3-coder:30b
+# 2. Refactoring-Modell herunterladen (empfohlen: qwen2.5-coder:7b oder qwen3-coder:30b)
+ollama pull qwen2.5-coder:7b
 
 # 3. Ollama-Server starten (falls nicht automatisch)
 ollama serve
@@ -578,10 +579,10 @@ feat: Implementiere Ollama-API-Anbindung mit Systemprompt
 - Integriere Ollama-API (localhost:11434/api/generate)
 - Füge Systemprompt für Refactoring-Agent hinzu
 - Implementiere JSON-Output-Format
-- Unterstütze qwen3-coder:30b, deepseek-coder:33b, magicoder:7b
+- Unterstütze qwen2.5-coder:7b, qwen3-coder:30b, deepseek-coder:33b, magicoder:7b
 - Zeilenanzahl: +95 (Gesamt: 180/250)
 
-Model: qwen3-coder:30b
+Model: qwen2.5-coder:7b
 Review: @Teammember
 ```
 
@@ -601,17 +602,17 @@ Review: @Teammember
 ## Ausgeführte Tests:
 - [x] Unit-Tests (pytest, mit Mock-Ollama)
 - [x] CLI-Integrationstests
-- [x] Ollama-API-Tests (mit qwen3-coder:30b)
+- [x] Ollama-API-Tests (mit qwen2.5-coder:7b)
 - [x] Systemprompt-Tests
 - [x] Beispiel-Testfälle
 - [x] Linting (pylint)
 
 ## Anmerkungen:
 - Alle Kernfunktionen arbeiten wie erwartet.
-- Ollama-API-Anbindung erfolgreich getestet (qwen3-coder:30b).
+- Ollama-API-Anbindung erfolgreich getestet (qwen2.5-coder:7b).
 - Systemprompt generiert strukturierte JSON-Ausgabe nach Spezifikation.
 - Performance: Analyse von 100 Zeilen Code in < 3 Sekunden (inkl. API-Aufruf).
-- Modell: qwen3-coder:30b (lokal, 19GB Q4_K_M) oder magicoder:7b (lokal, 4GB, 60+ Tokens/Sek.)
+- Modell: qwen2.5-coder:7b (lokal, ~4GB) oder magicoder:7b (lokal, 4GB, 60+ Tokens/Sek.)
 ```
 
 ### Beispiel-Ausgabe (JSON)

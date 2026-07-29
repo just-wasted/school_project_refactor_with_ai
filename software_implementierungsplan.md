@@ -29,7 +29,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                    Ollama-Server (localhost:11434)              │
 │  ┌─────────────────────────────────────────────────────────┐  │
-│  │ Lokales Modell: qwen3-coder:30b / deepseek-coder:33b       │  │
+│  │ Lokales Modell: qwen2.5-coder:7b / qwen3-coder:30b        │  │
 │  │ /api/generate Endpunkt                                       │  │
 │  └─────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -109,7 +109,7 @@ projekt/
 #### A.1 CLI-Grundgerüst (1 Stunde)
 - [ ] argparse-Parser mit Unterkommando `analyze` implementieren
 - [ ] Argument `--file` für Datei-Input
-- [ ] Argument `--model` mit Default `qwen3-coder:30b`
+- [ ] Argument `--model` mit Default `qwen2.5-coder:7b`
 - [ ] Argument `--temperature` (0.0-1.0, Default: 0.1)
 - [ ] Argument `--format` (json/text, Default: json)
 - [ ] stdin-Unterstützung für Piping
@@ -125,7 +125,7 @@ def main():
     
     analyze_parser = subparsers.add_parser("analyze", help="Code analysieren")
     analyze_parser.add_argument("file", nargs="?", help="Dateipfad")
-    analyze_parser.add_argument("--model", default="qwen3-coder:30b")
+    analyze_parser.add_argument("--model", default="qwen2.5-coder:7b")
     analyze_parser.add_argument("--temperature", type=float, default=0.1)
     analyze_parser.add_argument("--format", choices=["json", "text"], default="json")
     
@@ -301,7 +301,7 @@ def test_call_ollama_success(mock_post):
     mock_post.return_value = MockResponse(
         {"response": '{"file": "test.py", "smells": []}'}, 200
     )
-    result = agent.call_ollama("def foo(): pass", "qwen3-coder:30b", 0.1)
+    result = agent.call_ollama("def foo(): pass", "qwen2.5-coder:7b", 0.1)
     assert "response" in result
 
 @patch('requests.post')
@@ -415,7 +415,8 @@ prompts/
 | Komponente | Version | Zweck |
 |------------|---------|-------|
 | Ollama | >= 0.3.0 | Lokale KI-Modell-Server |
-| qwen3-coder:30b | latest | Primäres Refactoring-Modell |
+| qwen2.5-coder:7b | latest | **Primäres Refactoring-Modell** |
+| qwen3-coder:30b | latest | Alternative für komplexe Aufgaben |
 | deepseek-coder:33b | latest | Alternative für komplexe Aufgaben |
 | magicoder:7b | latest | Alternative für schnelle Analyse |
 
@@ -438,7 +439,7 @@ pip install requests pytest pytest-mock
 curl -fsSL https://ollama.com/install.sh | sh
 
 # 4. Modell herunterladen
-ollama pull qwen3-coder:30b
+ollama pull qwen2.5-coder:7b
 
 # 5. Agent installieren (optional, für globale Nutzung)
 pip install -e .
@@ -521,7 +522,7 @@ echo "$result" | jq '.smells | length'
 import subprocess
 import json
 
-def get_refactoring_suggestions(file_path: str, model: str = "qwen3-coder:30b") -> dict:
+def get_refactoring_suggestions(file_path: str, model: str = "qwen2.5-coder:7b") -> dict:
     result = subprocess.run(
         ["refactoring-agent", "analyze", file_path, "--model", model, "--format", "json"],
         capture_output=True,
@@ -637,7 +638,7 @@ pip install -r requirements.txt
 
 # 4. Ollama vorbereiten
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen3-coder:30b
+ollama pull qwen2.5-coder:7b
 ollama serve
 
 # 5. Agent testen

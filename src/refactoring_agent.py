@@ -103,10 +103,11 @@ def main():
     analyze_parser = subparsers.add_parser("analyze", help="Code analysieren")
     analyze_parser.add_argument("file", nargs="?", help="Dateipfad (optional)")
     analyze_parser.add_argument(
-        "--model", default="qwen3-coder:30b",
-        choices=["qwen3-coder:30b", "qwen3-coder:7b", "deepseek-coder:33b",
-                 "deepseek-coder:6.7b", "devstral:24b", "magicoder:7b"],
-        help="Ollama-Modell (default: qwen3-coder:30b)"
+        "--model", default="qwen2.5-coder:7b",
+        choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
+                 "deepseek-coder:33b", "deepseek-coder:6.7b", 
+                 "devstral:24b", "magicoder:7b"],
+        help="Ollama-Modell (default: qwen2.5-coder:7b)"
     )
     analyze_parser.add_argument(
         "--temperature", type=float, default=0.1, help="Kreativität (0.0-1.0)"
