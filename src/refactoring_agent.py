@@ -9,9 +9,11 @@ import subprocess
 import requests
 import difflib
 import shutil
+import datetime
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 240
+BACKUP_DIR = "backup"
 
 # Lade System-Prompt aus externer Datei für bessere Wartbarkeit
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
@@ -25,35 +27,76 @@ def load_system_prompt():
             return f.read().strip()
     except FileNotFoundError:
         # Fallback-Prompt falls Datei nicht gefunden
-        return """Du bist ein Code-Refactoring-Spezialist. Refaktoriere ITERATIV mit EINER MINIMALEN ÄNDERUNG PRO SCHRITT.
-
-HÄRTESTE REGELN:
-- PRO VORSCHLAG NUR EINE ÄNDERUNG
-- JEDER SCHRITT MUSS DEN CODE IN GÜLTIGEM ZUSTAND HINTERLASSEN
-
-LOCATION-REGELN:
-- start_line MUSS <= end_line sein
-- Zum ERSETZEN: location = {start_line: X, end_line: Y} wo X <= Y
-- Zum EINFÜGEN: location = {start_line: N, end_line: N} (Einfügung nach Zeile N)
-- Location MUSS EXAKT sein - KEINE zusätzlichen Zeilen!
-
-REFACTORING-MUSTER (iterativ):
-- Long Method: Schritt 1 = Methode umschreiben, Schritt 2+ = Helfermethoden einfügen
-- Duplicate Code: Schritt 1 = Neue Methode, Schritt 2+ = Aufrufe ersetzen
-- Magic Numbers: Schritt 1 = Konstante definieren, Schritt 2 = Verwenden
-- Too Many Parameters: Schritt 1+ = Parameter-Object
-
-REGELN:
-- suggestion MUSS Code-Block ```python...``` enthalten
-- NUR Code im Location-Bereich ändern
-- KEINE Klassendefinitionen, Imports oder fremde Methoden
-- Behavior Preservation: Externes Verhalten darf sich NICHT ändern
-
-JSON-Format:
-{"file":"...","language":"Python","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":M},"description":"...","severity":"high|medium|low","suggestion":"```python\\n...\\n```","reason":"...","impact":"readability|maintainability|testability|performance"}],"stats":{"total_smells":X,"high":A,"medium":B,"low":C,"coverage":"Y%"}}"""
+        prompt_lines = [
+            "Du bist ein Code-Refactoring-Spezialist. Refaktoriere ITERATIV ",
+            "mit EINER MINIMALEN ÄNDERUNG PRO SCHRITT.",
+            "",
+            "HÄRTESTE REGELN:",
+            "- PRO VORSCHLAG NUR EINE ÄNDERUNG",
+            "- JEDER SCHRITT MUSS DEN CODE IN GÜLTIGEM ZUSTAND HINTERLASSEN",
+            "- DAS EXTERNE VERHALTEN DARF SICH NIEMALS ÄNDERN",
+            "- GIB IMMER ALLE ITERATIVEN SCHRITTE FÜR JEDEN CODE SMELL ZURÜCK",
+            "",
+            "VERIFIZIERUNGSPFLICHT:",
+            "- Jeder suggestion MUSS syntaktisch gültigen Python-Code enthalten",
+            "- Überprüfe Einrückung, vollständige Blöcke, geschlossene Strings",
+            "- Ungültiger Code wird automatisch übersprungen",
+            "",
+            "LOCATION-REGELN:",
+            "- start_line MUSS <= end_line sein",
+            "- ERSETZEN: location = {start_line: X, end_line: Y} wo X <= Y",
+            "- EINFÜGEN: location = {start_line: N, end_line: N}",
+            "- Location MUSS EXAKT sein",
+            "",
+            "VERBOTEN:",
+            "- KEINE Klassendefinition in suggestion",
+            "- KEINE Imports in suggestion",
+            "- KEINE mehreren logischen Änderungen in einem Schritt",
+            "- KEINE Verhaltensänderung",
+            "",
+            "REFACTORING-MUSTER (ALLE SCHRITTE):",
+            "- Long Method: 4 Schritte (Methode umschreiben + 3 Helfermethoden)",
+            "- Duplicate Code: 3 Schritte (Neue Methode + 2 Aufrufe ersetzen)",
+            "- Magic Numbers: 2 Schritte (Konstante definieren + Verwenden)",
+        ]
+        return "\n".join(prompt_lines)
 
 
 SYSTEM_PROMPT = load_system_prompt()
+
+
+def create_backup(file_path):
+    """Erstelle nur-lesbare Backup-Kopie der Originaldatei."""
+    backup_dir = os.path.join(os.path.dirname(file_path), BACKUP_DIR)
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"{timestamp}_{os.path.basename(file_path)}")
+    
+    shutil.copy2(file_path, backup_path)
+    os.chmod(backup_path, 0o444)
+    return backup_path
+
+
+def verify_syntax(code):
+    """Prüfe ob Code syntaktisch gültig ist mit py_compile."""
+    try:
+        temp_file = f"/tmp/syntax_check_{os.getpid()}.py"
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            f.write(code)
+        
+        result = subprocess.run(
+            ["python", "-m", "py_compile", temp_file],
+            capture_output=True,
+            timeout=5
+        )
+        
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        
+        return result.returncode == 0, result.stderr.decode() if result.stderr else ""
+    except Exception as e:
+        return False, str(e)
 
 
 def has_bat():
@@ -317,11 +360,19 @@ def apply_interactive_finalize(modified_code, applied_count, output_file):
     return modified_code
 
 
-def apply_smell(code, smell):
+def apply_smell(code, smell, verify=True):
     """Wendet einen einzelnen Smell-Vorschlag auf den Code an.
     
     Ersetzt den Code im Location-Bereich (start_line bis end_line) durch den suggestion-Code
     oder fügt neuen Code ein, wenn start_line == end_line (Einfügung).
+    
+    Args:
+        code: Originaler Code
+        smell: Smell-Vorschlag mit location und suggestion
+        verify: Falls True, prüfe Syntax des resultierenden Codes
+    
+    Returns:
+        modifizierter Code, oder Originalcode wenn Syntax-Fehler
     """
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
@@ -346,33 +397,92 @@ def apply_smell(code, smell):
     if start_line == end_line:
         # Füge nach der Zeile start_line ein
         if start_line >= 0 and start_line <= len(lines):
+            # Erhalte die aktuelle Einrückung der Zeile, nach der eingefügt wird
+            if start_line < len(lines):
+                current_line = lines[start_line]
+                indentation = len(current_line) - len(current_line.lstrip())
+                # Wenn die Zeile eine Methode/klasse schließt (z.B. clase Definition), 
+                # füge mit gleicher Einrückung ein
+                if current_line.strip().startswith(('class ', 'def ')):
+                    # Nach einer Klassendefinition oder Methodendefinition: gleiche Einrückung + 4
+                    refactored_code = ' ' * (indentation + 4) + refactored_code.lstrip()
+                else:
+                    # Standard: gleiche Einrückung
+                    refactored_code = ' ' * indentation + refactored_code.lstrip()
             new_lines = lines[:start_line + 1] + [refactored_code] + lines[start_line + 1:]
-            return '\n'.join(new_lines)
+            proposed_code = '\n'.join(new_lines)
         else:
             # Einfügung am Anfang
-            return refactored_code + '\n' + code
+            proposed_code = refactored_code + '\n' + code
     
     # Fall 2: Ersatz (start_line < end_line)
-    if start_line >= 0 and end_line < len(lines):
+    elif start_line >= 0 and end_line < len(lines):
+        # Erhalte die Einrückung der ersten Zeile im Ersatzbereich
+        if start_line < len(lines):
+            first_line = lines[start_line]
+            indentation = len(first_line) - len(first_line.lstrip())
+            # Ersetze Einrückung im refactored_code
+            if refactored_code.strip():
+                # Ersetze jede Zeile mit der korrekten Einrückung
+                refactored_lines = refactored_code.split('\n')
+                indented_lines = []
+                for line in refactored_lines:
+                    if line.strip():
+                        # Behalte relative Einrückung bei
+                        line_indent = len(line) - len(line.lstrip())
+                        new_indent = indentation + line_indent
+                        indented_lines.append(' ' * new_indent + line.lstrip())
+                    else:
+                        indented_lines.append(line)
+                refactored_code = '\n'.join(indented_lines)
+        
         # Ersetze den Code von start_line bis end_line durch den refactored_code
         new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
-        return '\n'.join(new_lines)
+        proposed_code = '\n'.join(new_lines)
     
     # Fall 3: Location außerhalb des Codes - füge am Ende hinzu
-    return code + '\n' + refactored_code
+    else:
+        proposed_code = code + '\n' + refactored_code
+    
+    # Verifizierung
+    if verify:
+        is_valid, error = verify_syntax(proposed_code)
+        if not is_valid:
+            print(f"⚠️  Vorschlag übersprungen: Syntax-Fehler in Zeile {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}: {error}")
+            return code
+    
+    return proposed_code
 
 
-def apply_interactive(code, smells, output_file=None):
-    """Interaktiver Modus: Zeigt jeden Smell an und fragt nach Bestätigung."""
+def apply_interactive(code, smells, output_file=None, file_path=None):
+    """Interaktiver Modus: Zeigt jeden Smell an und fragt nach Bestätigung.
+    
+    Args:
+        code: Originaler Code
+        smells: Liste der Smell-Vorschläge
+        output_file: Zieldatei für das Ergebnis
+        file_path: Originaldateipfad (für Backup)
+    """
     if not smells:
         print("Keine Refactoring-Vorschläge gefunden.")
         return code
+    
+    # Backup erstellen, wenn wir eine Datei bearbeiten
+    backup_path = None
+    if file_path and os.path.exists(file_path):
+        backup_path = create_backup(file_path)
+        print(f"💾 Backup erstellt: {backup_path}")
     
     modified_code = code
     applied_count = 0
     
     for i, smell in enumerate(smells):
         proposed_code = apply_smell(modified_code, smell)
+        
+        # Wenn sich nichts geändert hat (Syntax-Fehler), überspringen
+        if proposed_code == modified_code:
+            continue
+        
         show_diff(modified_code, proposed_code, smell)
         
         while True:
@@ -389,8 +499,10 @@ def apply_interactive(code, smells, output_file=None):
                 applied_count += 1
                 # Wende alle verbleibenden Vorschläge an
                 for remaining_smell in smells[i + 1:]:
-                    modified_code = apply_smell(modified_code, remaining_smell)
-                    applied_count += 1
+                    proposed = apply_smell(modified_code, remaining_smell)
+                    if proposed != modified_code:
+                        modified_code = proposed
+                        applied_count += 1
                 # Beende die Schleife
                 return apply_interactive_finalize(modified_code, applied_count, output_file)
             elif response in ('q', 'quit', 'exit'):
@@ -402,18 +514,37 @@ def apply_interactive(code, smells, output_file=None):
     return apply_interactive_finalize(modified_code, applied_count, output_file)
 
 
-def apply_all(code, smells, output_file):
-    """Wendet alle Smell-Vorschläge automatisch an."""
+def apply_all(code, smells, output_file, file_path=None):
+    """Wendet alle Smell-Vorschläge automatisch an.
+    
+    Args:
+        code: Originaler Code
+        smells: Liste der Smell-Vorschläge
+        output_file: Zieldatei für das Ergebnis
+        file_path: Originaldateipfad (für Backup)
+    """
     if not smells:
         raise RuntimeError("Keine Refactoring-Vorschläge gefunden")
     
+    # Backup erstellen
+    backup_path = None
+    if file_path and os.path.exists(file_path):
+        backup_path = create_backup(file_path)
+        print(f"💾 Backup erstellt: {backup_path}")
+    
     modified_code = code
+    applied_count = 0
+    
     for smell in smells:
-        modified_code = apply_smell(modified_code, smell)
+        proposed_code = apply_smell(modified_code, smell)
+        if proposed_code != modified_code:
+            modified_code = proposed_code
+            applied_count += 1
     
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(modified_code)
     
+    print(f"✅ Alle {applied_count} von {len(smells)} Vorschlägen erfolgreich angewendet.")
     return output_file
 
 
@@ -485,16 +616,14 @@ def main():
     elif args.auto_apply:
         output_file = args.output if args.output else args.file
         try:
-            apply_all(code, smells, output_file)
-            print(f"Alle {len(smells)} Vorschläge automatisch angewendet.")
-            print(f"Ergebnis geschrieben nach: {output_file}")
+            apply_all(code, smells, output_file, file_path=args.file)
         except RuntimeError as e:
             print(f"Fehler: {e}", file=sys.stderr)
             sys.exit(1)
     else:
         output_file = args.output if args.output else args.file
         try:
-            apply_interactive(code, smells, output_file)
+            apply_interactive(code, smells, output_file, file_path=args.file)
         except RuntimeError as e:
             print(f"Fehler: {e}", file=sys.stderr)
             sys.exit(1)
