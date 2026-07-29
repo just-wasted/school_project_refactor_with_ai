@@ -164,13 +164,11 @@ def call_ollama(code, model, temperature, error_context=None):
         prompt += f"\n\nFEHLERHINWEIS: {clean_error}\nBitte korrigiere deine Code-Vorschläge so, dass sie syntaktisch gültigen Python-Code erzeugen."
     
     # Setze Kontextfenster basierend auf dem Modell
-    # gemma4 Modelle unterstützen bis zu 128K, qwen Modelle bis zu 256K
+    # gemma4:e2b unterstützt 128K Token (131072), qwen2.5-coder:7b unterstützt 32K
     if "gemma4" in model:
         num_ctx = 131072  # 128K für Gemma4
-    elif "qwen3" in model or "qwen2.5" in model:
-        num_ctx = 32768  # 32K für Qwen2.5 (kann bis 256K, aber 32K reicht für <=250 Zeilen)
     else:
-        num_ctx = 32768  # Default
+        num_ctx = 32768  # 32K für andere Modelle (qwen, deepseek, etc.)
     
     payload = {
         "model": model,
