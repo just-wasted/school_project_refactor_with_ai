@@ -373,10 +373,15 @@ def show_diff(original, modified, smell):
 def apply_interactive_finalize(modified_code, applied_count, output_file):
     """Hilfsfunktion zum Abschließen des interaktiven Modus."""
     if output_file:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(modified_code)
-        print(f"\nRefactoring abgeschlossen. {applied_count} Vorschläge angewendet.")
-        print(f"Ergebnis geschrieben nach: {output_file}")
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(modified_code)
+            print(f"\nRefactoring abgeschlossen. {applied_count} Vorschlaege angewendet.")
+            print(f"Ergebnis geschrieben nach: {output_file}")
+        except PermissionError:
+            print(f"\nFehler: Keine Schreibrechte fuer {output_file}")
+            print("Bitte waehle einen anderen Ausgabepfad oder aendere die Berechtigungen.")
+            return None
     return modified_code
 
 
@@ -413,6 +418,28 @@ def apply_smell(code, smell, verify=True):
     else:
         refactored_code = suggestion
     
+    # Normalisiere die Einrückung des refactored_code
+    # Finde die minimale Einrückung und subtrahiere sie
+    if refactored_code.strip():
+        code_line = refactored_code
+        # Alle Zeilen des Code-Blocks
+        all_lines = refactored_code.split('\n')
+        # Finde die minimale Einrückung (nur nicht-leere Zeilen)
+        min_indent = float('inf')
+        for line in all_lines:
+            if line.strip():
+                indent = len(line) - len(line.lstrip())
+                min_indent = min(min_indent, indent)
+        # Normalisiere alle Zeilen durch Subtraktion der minimalen Einrückung
+        if min_indent > 0 and min_indent != float('inf'):
+            normalized_lines = []
+            for line in all_lines:
+                if line.strip():
+                    normalized_lines.append(line[min_indent:])
+                else:
+                    normalized_lines.append(line)
+            refactored_code = '\n'.join(normalized_lines)
+    
     # Fall 1: Einfügung (start_line == end_line)
     if start_line == end_line:
         # Füge nach der Zeile start_line ein
@@ -421,14 +448,17 @@ def apply_smell(code, smell, verify=True):
             if start_line < len(lines):
                 current_line = lines[start_line]
                 indentation = len(current_line) - len(current_line.lstrip())
-                # Wenn die Zeile eine Methode/klasse schließt (z.B. clase Definition), 
-                # füge mit gleicher Einrückung ein
+                # Wenn die Zeile eine Methode/klasse schließt (z.B. class Definition), 
+                # füge mit gleicher Einrückung + 4 ein
                 if current_line.strip().startswith(('class ', 'def ')):
                     # Nach einer Klassendefinition oder Methodendefinition: gleiche Einrückung + 4
-                    refactored_code = ' ' * (indentation + 4) + refactored_code.lstrip()
+                    prefix = ' ' * (indentation + 4)
                 else:
                     # Standard: gleiche Einrückung
-                    refactored_code = ' ' * indentation + refactored_code.lstrip()
+                    prefix = ' ' * indentation
+                # Füge Prefix zu jeder Zeile des refactored_code hinzu
+                prefixed_lines = [prefix + line if line.strip() else line for line in refactored_code.split('\n')]
+                refactored_code = '\n'.join(prefixed_lines)
             new_lines = lines[:start_line + 1] + [refactored_code] + lines[start_line + 1:]
             proposed_code = '\n'.join(new_lines)
         else:
@@ -441,20 +471,14 @@ def apply_smell(code, smell, verify=True):
         if start_line < len(lines):
             first_line = lines[start_line]
             indentation = len(first_line) - len(first_line.lstrip())
-            # Ersetze Einrückung im refactored_code
-            if refactored_code.strip():
-                # Ersetze jede Zeile mit der korrekten Einrückung
-                refactored_lines = refactored_code.split('\n')
-                indented_lines = []
-                for line in refactored_lines:
-                    if line.strip():
-                        # Behalte relative Einrückung bei
-                        line_indent = len(line) - len(line.lstrip())
-                        new_indent = indentation + line_indent
-                        indented_lines.append(' ' * new_indent + line.lstrip())
-                    else:
-                        indented_lines.append(line)
-                refactored_code = '\n'.join(indented_lines)
+            # Füge Prefix zu jeder Zeile des refactored_code hinzu
+            prefixed_lines = []
+            for line in refactored_code.split('\n'):
+                if line.strip():
+                    prefixed_lines.append(' ' * indentation + line)
+                else:
+                    prefixed_lines.append(line)
+            refactored_code = '\n'.join(prefixed_lines)
         
         # Ersetze den Code von start_line bis end_line durch den refactored_code
         new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
@@ -561,11 +585,15 @@ def apply_all(code, smells, output_file, file_path=None):
             modified_code = proposed_code
             applied_count += 1
     
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(modified_code)
-    
-    print(f"Alle {applied_count} von {len(smells)} Vorschlaegen erfolgreich angewendet.")
-    return output_file
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        print(f"Alle {applied_count} von {len(smells)} Vorschlaegen erfolgreich angewendet.")
+        return output_file
+    except PermissionError:
+        print(f"Fehler: Keine Schreibrechte fuer {output_file}")
+        print("Bitte waehle einen anderen Ausgabepfad oder aendere die Berechtigungen.")
+        raise RuntimeError(f"Permission denied: {output_file}")
 
 
 def main():
