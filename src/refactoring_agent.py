@@ -448,7 +448,7 @@ def apply_smell(code, smell, verify=True):
     if verify:
         is_valid, error = verify_syntax(proposed_code)
         if not is_valid:
-            print(f"⚠️  Vorschlag übersprungen: Syntax-Fehler in Zeile {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}: {error}")
+            print(f"Vorschlag uebersprungen: Syntax-Fehler in Zeile {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}: {error}")
             return code
     
     return proposed_code
@@ -471,7 +471,7 @@ def apply_interactive(code, smells, output_file=None, file_path=None):
     backup_path = None
     if file_path and os.path.exists(file_path):
         backup_path = create_backup(file_path)
-        print(f"💾 Backup erstellt: {backup_path}")
+        print(f"Backup erstellt: {backup_path}")
     
     modified_code = code
     applied_count = 0
@@ -530,7 +530,7 @@ def apply_all(code, smells, output_file, file_path=None):
     backup_path = None
     if file_path and os.path.exists(file_path):
         backup_path = create_backup(file_path)
-        print(f"💾 Backup erstellt: {backup_path}")
+        print(f"Backup erstellt: {backup_path}")
     
     modified_code = code
     applied_count = 0
@@ -544,7 +544,7 @@ def apply_all(code, smells, output_file, file_path=None):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(modified_code)
     
-    print(f"✅ Alle {applied_count} von {len(smells)} Vorschlägen erfolgreich angewendet.")
+    print(f"Alle {applied_count} von {len(smells)} Vorschlaegen erfolgreich angewendet.")
     return output_file
 
 
