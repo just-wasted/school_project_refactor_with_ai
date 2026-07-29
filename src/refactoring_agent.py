@@ -51,9 +51,9 @@ def has_bat():
 def display_diff_with_bat(diff_text):
     """Zeige den Diff mit bat für Syntax-Highlighting."""
     try:
-        # bat mit Diff-Highlighting und Zeilennummern
+        # bat mit Diff-Highlighting, erzwinge Farben und keine Decorationen wie Zeilennummern
         process = subprocess.Popen(
-            ["bat", "--paging=never", "--style=plain", "--language=diff"],
+            ["bat", "--paging=never", "--color=always", "--decorations=never", "--language=diff"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
