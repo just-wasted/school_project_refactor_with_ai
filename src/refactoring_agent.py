@@ -269,7 +269,11 @@ def apply_interactive_finalize(modified_code, applied_count, output_file):
 
 
 def apply_smell(code, smell):
-    """Wendet einen einzelnen Smell-Vorschlag auf den Code an."""
+    """Wendet einen einzelnen Smell-Vorschlag auf den Code an.
+    
+    Ersetzt den betroffenen Code direkt mit dem refactored Code aus dem suggestion.
+    Fügt keine Kommentare ein, sondern ersetzt den Code direkt.
+    """
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
     end_line = smell.get('location', {}).get('end_line', 1) - 1
@@ -279,19 +283,24 @@ def apply_smell(code, smell):
     # Extrahiere Code-Blöcke aus dem suggestion
     code_blocks = extract_code_blocks(suggestion)
     
-    if start_line >= 0 and end_line < len(lines) and code_blocks:
-        # Ersetze den betroffenen Bereich mit dem refactored Code
-        refactored_code = code_blocks[0]
+    if start_line >= 0 and end_line < len(lines):
+        # Ersetze den betroffenen Bereich direkt mit dem refactored Code
+        if code_blocks:
+            # Verwende den ersten Code-Block
+            refactored_code = code_blocks[0]
+        else:
+            # Falls kein Code-Block, versuche den suggestion-Text direkt als Code zu verwenden
+            # (z.B. wenn die KI nur eine einfache Zeile zurückgibt)
+            refactored_code = suggestion
         
-        # Ersetze die Zeilen von start_line bis end_line
+        # Ersetze die Zeilen von start_line bis end_line mit dem neuen Code
         new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
         return '\n'.join(new_lines)
-    elif start_line >= 0 and end_line < len(lines):
-        # Falls kein Code-Block im suggestion, füge Kommentar ein
-        lines[start_line] = f"# REFACCTORING: {smell.get('description', '')}\n# {suggestion}\n" + lines[start_line]
-        return '\n'.join(lines)
     
-    return code + f"\n\n# REFACCTORING: {smell.get('description', '')}\n# {suggestion}\n"
+    # Falls die Location außerhalb des Codes liegt, füge den Code am Ende hinzu
+    if code_blocks:
+        return code + '\n' + code_blocks[0]
+    return code + '\n' + suggestion
 
 
 def apply_interactive(code, smells, output_file=None):
