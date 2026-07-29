@@ -11,7 +11,7 @@ import difflib
 import shutil
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-TIMEOUT = 120
+TIMEOUT = 240
 
 # Lade System-Prompt aus externer Datei für bessere Wartbarkeit
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
