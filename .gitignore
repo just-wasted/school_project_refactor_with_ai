@@ -69,3 +69,7 @@ venv.bak/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backup files
+backup/
+BAK_code_smells/
