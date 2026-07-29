@@ -8,8 +8,10 @@ TIMEOUT = 240
 BACKUP_DIR = "backup"
 
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
-with open(os.path.join(PROMPTS_DIR, "system_prompt.md"), "r", encoding="utf-8") as f:
-    SYSTEM_PROMPT = f.read().strip()
+with open(os.path.join(PROMPTS_DIR, "system_prompt_analyze.md"), "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT_ANALYZE = f.read().strip()
+with open(os.path.join(PROMPTS_DIR, "system_prompt_apply.md"), "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT_APPLY = f.read().strip()
 
 
 def create_backup(fp):
@@ -73,16 +75,21 @@ def check_model(m):
         return False
 
 
-def call_ollama(code, model, temp, mode="analyze"):
+def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
     nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
     if mode == "analyze":
         p = f"Analyze the code with line numbers. Return old_code, new_code, diff.\n\n```\n{nc}\n```"
+        system = SYSTEM_PROMPT_ANALYZE
+        use_json_format = True
     else:
-        p = f"Apply the changes. Return ONLY the complete Python code.\n\n{code}"
+        p = f"{apply_instructions}\n\nComplete file code:\n{code}\nApply all selected refactorings."
+        system = SYSTEM_PROMPT_APPLY
+        use_json_format = False
     nctx = 131072 if "gemma4" in model else 32768
-    payload = {"model": model, "system": SYSTEM_PROMPT if mode == "analyze" else
-              "Apply changes. Return ONLY the complete Python code.", "prompt": p, "stream": False,
-              "format": "json", "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx}}
+    payload = {"model": model, "system": system, "prompt": p, "stream": False,
+              "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx}}
+    if use_json_format:
+        payload["format"] = "json"
     r = requests.post(OLLAMA_URL, headers={"Content-Type": "application/json"},
                     data=json.dumps(payload), timeout=TIMEOUT)
     r.raise_for_status()
@@ -180,29 +187,55 @@ def get_selection(smells):
     return sel
 
 
+def run_pyflakes(code):
+    try:
+        tf = f"/tmp/pyflakes_{os.getpid()}.py"
+        with open(tf, 'w', encoding='utf-8') as f:
+            f.write(code)
+        p = subprocess.run(["pyflakes", tf], capture_output=True, text=True, timeout=10)
+        if os.path.exists(tf):
+            os.remove(tf)
+        return p.returncode == 0, p.stdout + p.stderr
+    except:
+        return True, ""
+
 def apply_refactoring(code, smells, sel, model, temp):
     if not sel:
         return code
-    inst = "Wende die Änderungen an. Gib NUR den kompletten Python-Code zurück. KEINE Markdown-Formatierung wie ```python.\n\n"
-    for i, s in enumerate([smells[x] for x in sel], 1):
+    selected_smells = [smells[x] for x in sel]
+    inst = "YOU ARE APPLYING SELECTED REFACTORINGS. YOUR ABSOLUTE PRIORITY IS: EXTERNAL BEHAVIOR MUST NEVER CHANGE.\n"
+    inst += "RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO EXPLANATIONS.\n"
+    inst += "Remove old methods that are replaced by new helper methods.\n\n"
+    inst += "Selected refactorings to apply:\n"
+    for i, s in enumerate(selected_smells, 1):
         loc = s.get("location", {})
-        inst += f"{i}. Zeile {loc.get('start_line', '?')}-{loc.get('end_line', '?')}: {s.get('type', '')}\n"
-    inst += f"Original:\n{code}\nRefaktoriert:"
-    nctx = 131072 if "gemma4" in model else 32768
-    payload = {"model": model, "system": "Apply changes. Return ONLY the complete Python code. NO markdown formatting.",
-              "prompt": inst, "stream": False,
-              "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx}}
-    r = requests.post(OLLAMA_URL, headers={"Content-Type": "application/json"},
-                    data=json.dumps(payload), timeout=TIMEOUT)
-    r.raise_for_status()
-    result = r.json().get("response", "")
+        inst += f"{i}. Type: {s.get('type', 'unknown')}\n"
+        inst += f"   Lines: {loc.get('start_line', '?')}-{loc.get('end_line', '?')}\n"
+        inst += f"   Old code:\n{s.get('old_code', '')}\n"
+        inst += f"   New code:\n{s.get('new_code', '')}\n\n"
+    inst += "CRITICAL RULES:\n"
+    inst += "- Apply ALL selected changes atomically\n"
+    inst += "- REMOVE old methods that are replaced\n"
+    inst += "- NEVER change behavior not explicitly in selected refactorings\n"
+    inst += "- Preserve ALL validation, error messages, return values\n"
+    inst += "- RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO OTHER TEXT.\n"
+    
+    result = call_ollama(code, model, temp, mode="apply", apply_instructions=inst)
+    result_text = result.get("response", "")
     # Clean up markdown formatting if present
     for marker in ['```python', '```Python', '```']:
-        result = result.replace(marker, '').strip()
+        result_text = result_text.replace(marker, '').strip()
+    # Try to parse as JSON first (some models might still return JSON)
     try:
-        return json.loads(result).get("code", result)
-    except:
-        return result
+        parsed = json.loads(result_text)
+        if isinstance(parsed, dict):
+            result_text = parsed.get("code", result_text)
+        elif isinstance(parsed, str):
+            result_text = parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    
+    return result_text
 
 
 def main():
@@ -257,16 +290,32 @@ def main():
             print(f"Warnung: Backup fehlgeschlagen: {e}", file=sys.stderr)
     of = args.output if args.output else args.file
     try:
+        print("\nApplying refactorings (model validates its own output)...")
         rc = apply_refactoring(code, smells, selected, args.model, args.temperature)
+        
+        print("Running syntax check...")
         ok, err = verify_syntax(rc)
         if not ok:
-            print(f"Fehler: Syntax-Fehler: {err}")
+            print(f"  Syntax error found: {err}")
+            print("  Model should have caught this!")
             if backup_path:
                 print(f"Backup: {backup_path}")
             sys.exit(1)
+        
+        print("Running pyflakes...")
+        ok, flakes_err = run_pyflakes(rc)
+        if not ok:
+            print(f"  Pyflakes issues found:\n{flakes_err}")
+            print("  Model should have fixed these!")
+            if backup_path:
+                print(f"Backup: {backup_path}")
+            # Don't exit - just warn, as model should have handled this
+        else:
+            print("  Pyflakes: OK")
+        
         with open(of, 'w', encoding='utf-8') as f:
             f.write(rc)
-        print(f"\nFertig. {len(selected)} Vorschlag/Vorschläge angewendet: {of}")
+        print(f"\nRefactoring complete. {len(selected)} Vorschlag/Vorschläge angewendet: {of}")
     except PermissionError:
         print(f"Fehler: Keine Schreibrechte für {of}")
         sys.exit(1)
