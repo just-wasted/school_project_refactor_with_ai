@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """KI-Refactoring-Agent - Dünnes Interface für Code-Refactoring via Ollama."""
 
-import argparse, json, os, subprocess, sys, shutil, datetime, requests
+import argparse, json, os, subprocess, sys, shutil, datetime, requests, difflib
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 240
@@ -76,9 +76,9 @@ def check_model(m):
 def call_ollama(code, model, temp, mode="analyze"):
     nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
     if mode == "analyze":
-        p = f"Analysiere den Code MIT ZEILENNUMMERN. Gib old_code, new_code, diff zurück.\n\n```\n{nc}\n```"
+        p = f"Analyze the code with line numbers. Return old_code, new_code, diff.\n\n```\n{nc}\n```"
     else:
-        p = f"Wende die Änderungen an. Gib NUR den kompletten Code zurück.\n\n{code}"
+        p = f"Apply the changes. Return ONLY the complete Python code.\n\n{code}"
     nctx = 131072 if "gemma4" in model else 32768
     payload = {"model": model, "system": SYSTEM_PROMPT if mode == "analyze" else
               "Apply changes. Return ONLY the complete Python code.", "prompt": p, "stream": False,
@@ -89,11 +89,63 @@ def call_ollama(code, model, temp, mode="analyze"):
     return r.json()
 
 
-def extract_smells(resp):
+def extract_smells(resp, full_code=""):
     try:
-        return json.loads(resp.get("response", "{}")).get("smells", [])
+        response_text = resp.get("response", "{}")
+        smells = json.loads(response_text).get("smells", [])
+        if full_code:
+            full_lines = full_code.split('\n')
+            for s in smells:
+                loc = s.get("location", {})
+                start = loc.get("start_line", 0)
+                end = loc.get("end_line", 0)
+                if 1 <= start <= end <= len(full_lines):
+                    s["old_code"] = '\n'.join(full_lines[start-1:end])
+                fix_indentation(s, full_code)
+                # Generate diff locally if model didn't provide a proper one
+                if not s.get("diff") or s.get("old_code") == s.get("new_code"):
+                    old = s.get("old_code", "")
+                    new = s.get("new_code", "")
+                    if old and new and old != new:
+                        s["diff"] = generate_diff(old, new)
+        return smells
     except:
         return []
+
+
+def generate_diff(old_code, new_code):
+    old_lines = old_code.split('\n')
+    new_lines = new_code.split('\n')
+    diff = difflib.unified_diff(old_lines, new_lines, lineterm='')
+    return '\n'.join(diff)
+
+
+def fix_indentation(smell, full_code):
+    old = smell.get('old_code', '')
+    new = smell.get('new_code', '')
+    if not old or not new or old == new:
+        return
+    old_lines = old.split('\n')
+    new_lines = new.split('\n')
+    if not old_lines or not new_lines:
+        return
+    first_old = old_lines[0]
+    base_indent = len(first_old) - len(first_old.lstrip())
+    if base_indent <= 0:
+        return
+    # Find minimum indentation in new_code to normalize
+    new_indents = [len(line) - len(line.lstrip()) for line in new_lines if line.strip()]
+    min_new_indent = min(new_indents) if new_indents else 0
+    new_lines_fixed = []
+    for line in new_lines:
+        if line.strip():
+            # Normalize: subtract min indentation, then add base
+            normalized_indent = len(line) - len(line.lstrip()) - min_new_indent
+            total_indent = base_indent + normalized_indent
+            new_lines_fixed.append(' ' * total_indent + line.lstrip())
+        else:
+            new_lines_fixed.append(line)
+    smell['new_code'] = '\n'.join(new_lines_fixed)
 
 
 def display_smell(s, i):
@@ -110,7 +162,7 @@ def display_smell(s, i):
         if c:
             print(f"\n{label}:")
             print("-" * 70)
-            display_with_bat(c.strip(), "diff" if field == "diff" else "python")
+            display_with_bat(c, "diff" if field == "diff" else "python")
             print("-" * 70)
 
 
@@ -131,19 +183,22 @@ def get_selection(smells):
 def apply_refactoring(code, smells, sel, model, temp):
     if not sel:
         return code
-    inst = "Wende die Änderungen an. Gib NUR den kompletten Python-Code zurück.\n\n"
+    inst = "Wende die Änderungen an. Gib NUR den kompletten Python-Code zurück. KEINE Markdown-Formatierung wie ```python.\n\n"
     for i, s in enumerate([smells[x] for x in sel], 1):
         loc = s.get("location", {})
         inst += f"{i}. Zeile {loc.get('start_line', '?')}-{loc.get('end_line', '?')}: {s.get('type', '')}\n"
-    inst += f"Original:\n```python\n{code}\n```\nRefaktoriert:"
+    inst += f"Original:\n{code}\nRefaktoriert:"
     nctx = 131072 if "gemma4" in model else 32768
-    payload = {"model": model, "system": "Apply changes. Return ONLY the complete Python code.",
+    payload = {"model": model, "system": "Apply changes. Return ONLY the complete Python code. NO markdown formatting.",
               "prompt": inst, "stream": False,
               "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx}}
     r = requests.post(OLLAMA_URL, headers={"Content-Type": "application/json"},
                     data=json.dumps(payload), timeout=TIMEOUT)
     r.raise_for_status()
     result = r.json().get("response", "")
+    # Clean up markdown formatting if present
+    for marker in ['```python', '```Python', '```']:
+        result = result.replace(marker, '').strip()
     try:
         return json.loads(result).get("code", result)
     except:
@@ -179,12 +234,12 @@ def main():
     except Exception as e:
         print(f"API-Fehler: {e}", file=sys.stderr)
         sys.exit(1)
-    smells = extract_smells(result)
+    smells = extract_smells(result, code)
     if not smells:
         print("Keine Vorschläge gefunden.")
         sys.exit(0)
     if args.json:
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+        print(json.dumps(smells, indent=2, ensure_ascii=False))
         sys.exit(0)
     selected = get_selection(smells)
     if selected is None:
