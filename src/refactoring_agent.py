@@ -48,27 +48,28 @@ def has_bat():
     return shutil.which("bat") is not None
 
 
-def display_diff_with_bat(diff_text):
-    """Zeige den Diff mit bat für Syntax-Highlighting."""
+def display_code_with_bat(code_text, language="python"):
+    """Zeige Code mit bat für Syntax-Highlighting."""
     try:
-        # bat mit Diff-Highlighting, erzwinge Farben und keine Decorationen wie Zeilennummern
         process = subprocess.Popen(
-            ["bat", "--paging=never", "--color=always", "--decorations=never", "--language=diff"],
+            ["bat", "--paging=never", "--color=always", "--decorations=never", f"--language={language}"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
-        stdout, stderr = process.communicate(input=diff_text, timeout=5)
+        stdout, stderr = process.communicate(input=code_text, timeout=5)
         if process.returncode == 0:
-            # Gib die farbige Ausgabe aus (enthält bereits Newlines)
             print(stdout, end='')
         else:
-            # Falls bat fehlschlägt, normale Ausgabe
-            print(diff_text)
+            print(code_text)
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-        # bat nicht verfügbar oder Fehler
-        print(diff_text)
+        print(code_text)
+
+
+def display_diff_with_bat(diff_text):
+    """Zeige den Diff mit bat für Syntax-Highlighting."""
+    display_code_with_bat(diff_text, language="diff")
 
 
 def read_code(file_path):
@@ -186,10 +187,17 @@ def show_diff(original, modified, smell):
         print("-" * 70)
         
         # Zeige nur die Zeilen im Bereich start_line bis end_line
+        current_code = []
         for i in range(start_line, end_line + 1):
             if i < len(lines):
                 # Absolute Zeilennummer (i+1 weil lines 0-indexed ist)
-                print(f"{i+1:4d}: {lines[i]}")
+                current_code.append(f"{i+1:4d}: {lines[i]}")
+        
+        if has_bat():
+            display_code_with_bat('\n'.join(current_code), language="python")
+        else:
+            for line in current_code:
+                print(line)
         print("-" * 70)
     
     # Zeige die Vorschläge
@@ -203,10 +211,13 @@ def show_diff(original, modified, smell):
         if code_blocks:
             for i, block in enumerate(code_blocks, 1):
                 print(f"Code-Beispiel {i}:")
-                for line in block.strip().split('\n'):
-                    if line.strip():
-                        print(f"    {line}")
-                print()
+                if has_bat():
+                    display_code_with_bat(block.strip(), language="python")
+                else:
+                    for line in block.strip().split('\n'):
+                        if line.strip():
+                            print(f"    {line}")
+                    print()
         else:
             # Kein Code-Beispiel, nur Beschreibung
             print(f"Hinweis: {suggestion}")
