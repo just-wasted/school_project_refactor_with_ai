@@ -15,9 +15,14 @@ Code zu analysieren und konkrete Refactoring-Vorschläge als JSON zu generieren.
 Erkenne: Duplikate, lange Methoden (>20 Zeilen), unklare Namen, gemischte Verantwortlichkeiten,
 hohes zyklomatische Komplexität, unnötige Kommentare, Magic Numbers/Strings, zu viele Parameter (>4).
 Ausgabeformat: {"file":"...","language":"...","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":N},
-"description":"...","severity":"high|medium|low","suggestion":"...","reason":"...","impact":"readability|maintainability|testability|performance"}],
+"description":"...","severity":"high|medium|low","suggestion":"<full_refactored_code>...<full_refactored_code>","reason":"...","impact":"readability|maintainability|testability|performance"}],
 "stats":{"total_smells":N,"high":N,"medium":N,"low":N,"coverage":"X%"}}
-Regeln: Sei präzise, gib Code-Beispiele, erkläre Begründungen, ändere kein Verhalten."""
+Regeln: 
+1. Sei präzise, gib vollständige Code-Beispiele im suggestion Feld als ```python...``` Block
+2. Ersetze den betroffenen Code komplett im suggestion Feld
+3. Erkläre Begründungen kurz
+4. Ändere kein Verhalten
+5. Gib immer den vollständigen refactored Code zurück, nicht nur Beschreibungen"""
 
 
 def read_code(file_path):
@@ -129,24 +134,16 @@ def show_diff(original, modified, smell):
     print(f"Begründung: {smell.get('reason', '')}")
     print("=" * 70)
     
-    # Zeige den betroffenen Code-Bereich (nur den relevanten Teil)
+    # Zeige den betroffenen Code-Bereich mit absoluten Zeilennummern
     if start_line >= 0 and end_line < len(lines):
         print("\nAktueller Code:")
         print("-" * 70)
-        # Finde den ersten nicht-leeren/kommentar Zeile im Bereich
-        actual_start = start_line
-        while actual_start <= end_line and (not lines[actual_start].strip() or lines[actual_start].strip().startswith('#')):
-            actual_start += 1
-        if actual_start <= end_line:
-            start_line = actual_start
         
-        # Zeige den Code mit relativen Zeilennummern
+        # Zeige nur die Zeilen im Bereich start_line bis end_line
         for i in range(start_line, end_line + 1):
-            if lines[i].strip():  # Nur nicht-leere Zeilen
-                marker = ">>> " if start_line <= i <= end_line else "    "
-                # Relativ zur Methode
-                rel_line = i - start_line + 1
-                print(f"{marker}{rel_line:4d}: {lines[i]}")
+            if i < len(lines):
+                # Absolute Zeilennummer (i+1 weil lines 0-indexed ist)
+                print(f"{i+1:4d}: {lines[i]}")
         print("-" * 70)
     
     # Zeige die Vorschläge
@@ -169,9 +166,9 @@ def show_diff(original, modified, smell):
             print(f"Hinweis: {suggestion}")
         print("-" * 70)
     
-    # Zeige was tatsächlich geändert wird (Kommentare)
+    # Zeige was tatsächlich geändert wird
     if modified != original:
-        print("\nÄnderungen (Kommentare werden eingefügt):")
+        print("\nÄnderungen (Diff):")
         print("-" * 70)
         diff = difflib.unified_diff(
             original.splitlines(keepends=True),
@@ -179,12 +176,15 @@ def show_diff(original, modified, smell):
             fromfile="original",
             tofile="modified",
             lineterm="",
-            n=3
+            n=0
         )
         for line in diff:
             if line.startswith('+++') or line.startswith('---'):
                 continue
-            if line.startswith('+') and not line.startswith('++'):
+            if line.startswith('@@'):
+                # Zeige den Header des unified diff mit absoluten Zeilennummern
+                print(f" {line}", end='')
+            elif line.startswith('+') and not line.startswith('++'):
                 print(f"+{line[1:]}", end='')
             elif line.startswith('-') and not line.startswith('--'):
                 print(f"-{line[1:]}", end='')
@@ -201,7 +201,18 @@ def apply_smell(code, smell):
     
     suggestion = smell.get('suggestion', '')
     
-    if start_line >= 0 and end_line < len(lines):
+    # Extrahiere Code-Blöcke aus dem suggestion
+    code_blocks = extract_code_blocks(suggestion)
+    
+    if start_line >= 0 and end_line < len(lines) and code_blocks:
+        # Ersetze den betroffenen Bereich mit dem refactored Code
+        refactored_code = code_blocks[0]
+        
+        # Ersetze die Zeilen von start_line bis end_line
+        new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
+        return '\n'.join(new_lines)
+    elif start_line >= 0 and end_line < len(lines):
+        # Falls kein Code-Block im suggestion, füge Kommentar ein
         lines[start_line] = f"# REFACCTORING: {smell.get('description', '')}\n# {suggestion}\n" + lines[start_line]
         return '\n'.join(lines)
     

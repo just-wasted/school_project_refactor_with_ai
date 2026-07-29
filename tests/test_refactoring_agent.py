@@ -326,7 +326,21 @@ def test_extract_smells_empty():
 
 
 def test_apply_smell_valid_location():
-    """Test apply_smell with valid location."""
+    """Test apply_smell with valid location and code block in suggestion."""
+    code = "def foo():\n    pass"
+    smell = {
+        "type": "test",
+        "location": {"start_line": 1, "end_line": 1},
+        "description": "Test description",
+        "suggestion": "```python\ndef foo():\n    return 42\n```"
+    }
+    result = apply_smell(code, smell)
+    assert "return 42" in result
+    assert "def foo():" in result
+
+
+def test_apply_smell_without_code_block():
+    """Test apply_smell with valid location but no code block in suggestion."""
     code = "def foo():\n    pass"
     smell = {
         "type": "test",
