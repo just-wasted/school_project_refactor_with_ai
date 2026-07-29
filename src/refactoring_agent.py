@@ -25,13 +25,21 @@ def load_system_prompt():
             return f.read().strip()
     except FileNotFoundError:
         # Fallback-Prompt falls Datei nicht gefunden
-        return """Du bist ein Code-Refactoring-Spezialist. Deine Aufgabe: Analysiere Code und gib PRÄZISE JSON-Vorschläge zurück.
+        return """Du bist ein Code-Refactoring-Spezialist. Analysiere Code und gib REFACTORING-VORSCHLÄGE mit ECHTEN MUSTERN als JSON zurück.
 
 REGELN:
-1. Jeder smell-Eintrag behandelt EIN Problem an EINER Methode/Funktion.
-2. location.start_line und end_line MÜSSEN die EXAKTEN Zeilen dieser Methode/Funktion abdecken.
-3. suggestion MUSS EINEN Code-Block ```python...``` enthalten, der NUR diese Methode/Funktion ersetzt.
-4. VERBOTEN: Klassendefinitionen, Imports, andere Methoden, leere suggestions.
+1. Wende EIN Refactoring-Muster pro Vorschlag an (Extract Method, Introduce Constant, etc.)
+2. location muss EXAKT sein: start_line/end_line = genaue Zeilen der Methode
+3. suggestion MUSS Code-Block ```python...``` mit refaktoriertem Code enthalten
+4. NUR Code im Location-Bereich ändern
+
+REFACTORING-MUSTER:
+- Long Method: Teile in 3-5 kleinere Methoden auf
+- Duplicate Code: Extrahiere gemeinsame Logik in eine Methode
+- Magic Numbers: Ersetze durch Konstanten/Config
+- Too Many Parameters: Verwende Parameter-Object
+
+VERBOTEN: Klassendefinitionen, Imports, andere Methoden, leere suggestions, kosmetische Änderungen
 
 JSON-Format:
 {"file":"...","language":"Python","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":M},"description":"...","severity":"high|medium|low","suggestion":"```python\\n...\\n```","reason":"...","impact":"readability|maintainability|testability|performance"}],"stats":{"total_smells":X,"high":A,"medium":B,"low":C,"coverage":"Y%"}}"""
@@ -304,8 +312,8 @@ def apply_interactive_finalize(modified_code, applied_count, output_file):
 def apply_smell(code, smell):
     """Wendet einen einzelnen Smell-Vorschlag auf den Code an.
     
-    Ersetzt den betroffenen Code direkt mit dem refactored Code aus dem suggestion.
-    Fügt keine Kommentare ein, sondern ersetzt den Code direkt.
+    Ersetzt den Code im Location-Bereich (start_line bis end_line) durch den suggestion-Code.
+    Der suggestion-Code kann mehrere Methoden enthalten (z.B. bei Extract Method).
     """
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
@@ -317,18 +325,16 @@ def apply_smell(code, smell):
     code_blocks = extract_code_blocks(suggestion)
     
     if start_line >= 0 and end_line < len(lines):
-        # Ersetze den betroffenen Bereich direkt mit dem refactored Code
         if code_blocks:
-            # Verwende den ersten Code-Block
             refactored_code = code_blocks[0]
+            
+            # Ersetze den Code von start_line bis end_line durch den refactored_code
+            new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
+            return '\n'.join(new_lines)
         else:
-            # Falls kein Code-Block, versuche den suggestion-Text direkt als Code zu verwenden
-            # (z.B. wenn die KI nur eine einfache Zeile zurückgibt)
-            refactored_code = suggestion
-        
-        # Ersetze die Zeilen von start_line bis end_line mit dem neuen Code
-        new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
-        return '\n'.join(new_lines)
+            # Falls kein Code-Block, verwende suggestion direkt
+            new_lines = lines[:start_line] + [suggestion] + lines[end_line + 1:]
+            return '\n'.join(new_lines)
     
     # Falls die Location außerhalb des Codes liegt, füge den Code am Ende hinzu
     if code_blocks:
