@@ -1,4 +1,4 @@
-"""utils.py - Hilfsfunktionen mit Code Smells"""
+"""utils.py - Hilfsfunktionen"""
 
 class DataHelper:
     def process(self, data, flag=True):

@@ -1,4 +1,4 @@
-"""processor.py - Datenverarbeitung mit Code Smells"""
+"""processor.py - Datenverarbeitung"""
 
 class OrderProcessor:
     def process_transaction(self, transaction, user, order, payment):

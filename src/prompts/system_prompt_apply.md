@@ -16,14 +16,18 @@ Apply ALL selected refactorings to the provided code and return ONLY the complet
 - NEVER change exception raising conditions
 - If a method is refactored and replaced by helper methods:
   - REMOVE the old method COMPLETELY
+  - Move the logic from the old method INTO the new helper methods
   - Replace ALL calls to the old method with calls to the new helper methods
   - Preserve ALL behavior of the old method in the new structure
 
 ### CODE CLEANUP
 - Remove old methods that have been fully replaced by new helper methods
+- Remove duplicate methods (if new helpers have the same logic as existing methods)
 - Update ALL call sites when renaming parameters or methods
 - If a public method is kept, NEVER change its signature
 - Only rename private methods if the name is unclear AND all references are updated
+- NEVER create wrapper methods that just call existing methods - this is NOT refactoring
+- NEVER leave duplicate code or methods in the file
 
 ### VALIDATION AFTER REFACTORING
 You MUST verify your own output:

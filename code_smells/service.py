@@ -1,12 +1,5 @@
 """
-Service.py - Zentrale Serviceklasse mit Code Smells
-
-Kompakte Version mit allen wichtigen Problemen:
-- Lange Methode mit vermischten Verantwortlichkeiten
-- Duplikate Code-Blöcke
-- Unklare Variablennamen
-- Magic Numbers
-- Zu viele Parameter
+Service.py - Zentrale Serviceklasse für Bestellungen
 """
 
 import random
@@ -78,10 +71,3 @@ class CentralService:
         if e:
             result = result * 1.1
         return result
-
-
-def format_data(d):
-    return {"id": d["id"], "name": d["name"].title()}
-
-def prepare_data(d):
-    return {"id": d["id"], "name": d["name"].title()}

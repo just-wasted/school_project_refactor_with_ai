@@ -86,8 +86,9 @@ def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
         system = SYSTEM_PROMPT_APPLY
         use_json_format = False
     nctx = 131072 if "gemma4" in model else 32768
+    n_predict = 16384 if "gemma4" in model else 8192
     payload = {"model": model, "system": system, "prompt": p, "stream": False,
-              "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx}}
+              "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}}
     if use_json_format:
         payload["format"] = "json"
     r = requests.post(OLLAMA_URL, headers={"Content-Type": "application/json"},
@@ -96,10 +97,77 @@ def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
     return r.json()
 
 
+def fix_truncated_json(response_text):
+    """Try to fix truncated JSON by finding the closing }] or } of the outer structure."""
+    if not response_text.strip():
+        return "{}"
+    
+    # The response is always {"smells": [...]}, so look for the closing }] pattern
+    # Strategy: find the last occurrence of '}]' or '}' that closes the outer object
+    
+    # First try: find '}]' - this closes the smells array and the outer object in one go
+    last_array_close = response_text.rfind('}]')
+    if last_array_close > 0:
+        # Check if this is at the very end or followed by whitespace/newlines
+        remainder = response_text[last_array_close + 2:]
+        if not remainder.strip() or remainder.strip() in ['', '}']:
+            # Find the matching closing brace for the outer object
+            # The pattern is {"smells": [...]}
+            brace_count = 0
+            for i in range(last_array_close + 2, len(response_text)):
+                char = response_text[i]
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == -1:  # Found the closing brace for outer object
+                        return response_text[:i + 1]
+            return response_text[:last_array_close + 2]
+    
+    # Second try: work backwards to find last } outside of strings
+    in_string = False
+    escape_next = False
+    for i in range(len(response_text) - 1, -1, -1):
+        char = response_text[i]
+        
+        if escape_next:
+            escape_next = False
+            continue
+            
+        if char == '\\':
+            escape_next = True
+            continue
+            
+        if char == '"':
+            in_string = not in_string
+            
+        if not in_string and char == '}':
+            return response_text[:i + 1]
+    
+    return "{}"
+
+
 def extract_smells(resp, full_code=""):
     try:
         response_text = resp.get("response", "{}")
-        smells = json.loads(response_text).get("smells", [])
+        # Try to fix truncated JSON
+        if response_text.strip():
+            try:
+                parsed = json.loads(response_text)
+            except json.JSONDecodeError:
+                response_text = fix_truncated_json(response_text)
+                parsed = json.loads(response_text)
+        else:
+            parsed = {}
+        
+        # Handle both list and dict formats
+        if isinstance(parsed, list):
+            smells = parsed
+        elif isinstance(parsed, dict):
+            smells = parsed.get("smells", [])
+        else:
+            smells = []
+        
         if full_code:
             full_lines = full_code.split('\n')
             for s in smells:
@@ -272,7 +340,7 @@ def main():
         print("Keine Vorschläge gefunden.")
         sys.exit(0)
     if args.json:
-        print(json.dumps(smells, indent=2, ensure_ascii=False))
+        print(json.dumps({"smells": smells}, indent=2, ensure_ascii=False))
         sys.exit(0)
     selected = get_selection(smells)
     if selected is None:
