@@ -5,6 +5,7 @@ import argparse
 import sys
 import json
 import requests
+import difflib
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 120
@@ -104,12 +105,31 @@ def extract_smells(response):
         return []
 
 
-def apply_refactoring(code, smells, output_file):
-    """Wendet den ersten Refactoring-Vorschlag an und schreibt in output_file."""
-    if not smells:
-        raise RuntimeError("Keine Refactoring-Vorschläge gefunden")
-    
-    smell = smells[0]
+def show_diff(original, modified, smell):
+    """Zeige den Diff zwischen Original und modifiziertem Code."""
+    diff = difflib.unified_diff(
+        original.splitlines(keepends=True),
+        modified.splitlines(keepends=True),
+        fromfile="original",
+        tofile="modified",
+        lineterm=""
+    )
+    print("\n" + "=" * 60)
+    print(f"VORSCHLAG: {smell.get('type', 'unknown')}")
+    print(f"Beschreibung: {smell.get('description', '')}")
+    print(f"Zeile: {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}")
+    print("=" * 60)
+    print("Diff:")
+    print("-" * 60)
+    for line in diff:
+        if line.startswith('+++') or line.startswith('---'):
+            continue
+        print(line, end='')
+    print("-" * 60)
+
+
+def apply_smell(code, smell):
+    """Wendet einen einzelnen Smell-Vorschlag auf den Code an."""
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
     end_line = smell.get('location', {}).get('end_line', 1) - 1
@@ -117,16 +137,68 @@ def apply_refactoring(code, smells, output_file):
     suggestion = smell.get('suggestion', '')
     
     if start_line >= 0 and end_line < len(lines):
-        lines[start_line] = f"# REFACCTORING VORSCHLAG: {smell.get('description', '')}\n# {smell.get('reason', '')}\n# {suggestion}\n" + lines[start_line]
-        refactored_code = '\n'.join(lines)
-    else:
-        refactored_code = code + f"\n\n# REFACCTORING VORSCHLÄGE:\n"
-        for s in smells:
-            refactored_code += f"# {s.get('type', 'unknown')}: {s.get('description', '')}\n"
-            refactored_code += f"# Vorschlag: {s.get('suggestion', '')}\n"
+        lines[start_line] = f"# REFACCTORING: {smell.get('description', '')}\n# {suggestion}\n" + lines[start_line]
+        return '\n'.join(lines)
+    
+    return code + f"\n\n# REFACCTORING: {smell.get('description', '')}\n# {suggestion}\n"
+
+
+def apply_interactive(code, smells, output_file=None):
+    """Interaktiver Modus: Zeigt jeden Smell an und fragt nach Bestätigung."""
+    if not smells:
+        print("Keine Refactoring-Vorschläge gefunden.")
+        return code
+    
+    modified_code = code
+    applied_count = 0
+    
+    for smell in smells:
+        proposed_code = apply_smell(modified_code, smell)
+        show_diff(modified_code, proposed_code, smell)
+        
+        while True:
+            response = input("Anwenden? (j/n/s für überspringen/alles/abbruch): ").strip().lower()
+            if response in ('j', 'y', 'yes', ''):
+                modified_code = proposed_code
+                applied_count += 1
+                break
+            elif response in ('n', 'no'):
+                break
+            elif response in ('s', 'skip'):
+                break
+            elif response in ('a', 'all'):
+                modified_code = proposed_code
+                applied_count += 1
+                for remaining_smell in smells[smells.index(smell) + 1:]:
+                    modified_code = apply_smell(modified_code, remaining_smell)
+                    applied_count += 1
+                break
+            elif response in ('q', 'quit', 'exit'):
+                print("Abbruch.")
+                return None
+            else:
+                print("Ungültige Eingabe. Bitte j/n/s/a eingeben.")
+    
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        print(f"\nRefactoring abgeschlossen. {applied_count} Vorschläge angewendet.")
+        print(f"Ergebnis geschrieben nach: {output_file}")
+    
+    return modified_code
+
+
+def apply_all(code, smells, output_file):
+    """Wendet alle Smell-Vorschläge automatisch an."""
+    if not smells:
+        raise RuntimeError("Keine Refactoring-Vorschläge gefunden")
+    
+    modified_code = code
+    for smell in smells:
+        modified_code = apply_smell(modified_code, smell)
     
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(refactored_code)
+        f.write(modified_code)
     
     return output_file
 
@@ -136,116 +208,81 @@ def main():
     parser = argparse.ArgumentParser(
         description="KI-Refactoring-Agent für Code-Analyse und Refactoring"
     )
-    subparsers = parser.add_subparsers(dest="command")
-    
-    # Analyze-Kommando
-    analyze_parser = subparsers.add_parser("analyze", help="Code analysieren")
-    analyze_parser.add_argument("file", nargs="?", help="Dateipfad (optional)")
-    analyze_parser.add_argument(
+    parser.add_argument("file", help="Dateipfad der zu analysierenden/processenden Datei")
+    parser.add_argument(
+        "--json", action="store_true", help="Nur JSON-Ausgabe der Vorschläge (kein Apply)"
+    )
+    parser.add_argument(
+        "--auto-apply", action="store_true", 
+        help="Alle Vorschläge automatisch anwenden (ohne Nachfrage)"
+    )
+    parser.add_argument(
+        "--output", "-o", 
+        help="Zieldatei für refaktorierten Code (optional, Standard: Originaldatei überscheiben)"
+    )
+    parser.add_argument(
         "--model", default="qwen2.5-coder:7b",
         choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
                  "deepseek-coder:33b", "deepseek-coder:6.7b", 
                  "devstral:24b", "magicoder:7b"],
         help="Ollama-Modell (default: qwen2.5-coder:7b)"
     )
-    analyze_parser.add_argument(
-        "--temperature", type=float, default=0.1, help="Kreativität (0.0-1.0)"
-    )
-    analyze_parser.add_argument(
-        "--format", choices=["json", "text"], default="json", help="Ausgabeformat"
-    )
-    
-    # Apply-Kommando
-    apply_parser = subparsers.add_parser(
-        "apply", help="Refactoring-Vorschläge anwenden und in Datei schreiben"
-    )
-    apply_parser.add_argument("file", help="Dateipfad der zu refactorenden Datei")
-    apply_parser.add_argument(
-        "--output", "-o", required=True, help="Zieldatei für den refaktorierten Code"
-    )
-    apply_parser.add_argument(
-        "--model", default="qwen2.5-coder:7b",
-        choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
-                 "deepseek-coder:33b", "deepseek-coder:6.7b", 
-                 "devstral:24b", "magicoder:7b"],
-        help="Ollama-Modell (default: qwen2.5-coder:7b)"
-    )
-    apply_parser.add_argument(
+    parser.add_argument(
         "--temperature", type=float, default=0.1, help="Kreativität (0.0-1.0)"
     )
     
     args = parser.parse_args()
 
-    if args.command is None:
+    if not args.file:
         parser.print_help()
         sys.exit(1)
 
-    if args.command == "analyze":
+    try:
+        code = read_code(args.file)
+    except RuntimeError as e:
+        print(f"Fehler: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not check_ollama():
+        print(
+            "Fehler: Ollama-Server nicht erreichbar.\n"
+            "Installation: curl -fsSL https://ollama.com/install.sh | sh\n"
+            "Start: ollama serve",
+            file=sys.stderr
+        )
+        sys.exit(1)
+
+    if not check_model(args.model):
+        print(f"Warnung: Modell '{args.model}' nicht verfügbar.", file=sys.stderr)
+
+    try:
+        result = call_ollama(code, args.model, args.temperature)
+    except RuntimeError as e:
+        print(f"API-Fehler: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    smells = extract_smells(result)
+    if not smells:
+        print("Keine Refactoring-Vorschläge gefunden.")
+        sys.exit(0)
+
+    if args.json:
+        print(format_output(result, "json"))
+    elif args.auto_apply:
+        output_file = args.output if args.output else args.file
         try:
-            code = read_code(args.file)
+            apply_all(code, smells, output_file)
+            print(f"Alle {len(smells)} Vorschläge automatisch angewendet.")
+            print(f"Ergebnis geschrieben nach: {output_file}")
         except RuntimeError as e:
             print(f"Fehler: {e}", file=sys.stderr)
             sys.exit(1)
-
-        if not check_ollama():
-            print(
-                "Fehler: Ollama-Server nicht erreichbar.\n"
-                "Installation: curl -fsSL https://ollama.com/install.sh | sh\n"
-                "Start: ollama serve",
-                file=sys.stderr
-            )
-            sys.exit(1)
-
-        if not check_model(args.model):
-            print(f"Warnung: Modell '{args.model}' nicht verfügbar.", file=sys.stderr)
-
+    else:
+        output_file = args.output if args.output else args.file
         try:
-            result = call_ollama(code, args.model, args.temperature)
-        except RuntimeError as e:
-            print(f"API-Fehler: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        print(format_output(result, args.format))
-    
-    elif args.command == "apply":
-        try:
-            code = read_code(args.file)
+            apply_interactive(code, smells, output_file)
         except RuntimeError as e:
             print(f"Fehler: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        if not check_ollama():
-            print(
-                "Fehler: Ollama-Server nicht erreichbar.\n"
-                "Installation: curl -fsSL https://ollama.com/install.sh | sh\n"
-                "Start: ollama serve",
-                file=sys.stderr
-            )
-            sys.exit(1)
-
-        if not check_model(args.model):
-            print(f"Warnung: Modell '{args.model}' nicht verfügbar.", file=sys.stderr)
-
-        try:
-            result = call_ollama(code, args.model, args.temperature)
-        except RuntimeError as e:
-            print(f"API-Fehler: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        smells = extract_smells(result)
-        if not smells:
-            print("Keine Refactoring-Vorschläge gefunden.", file=sys.stderr)
-            sys.exit(1)
-
-        try:
-            output_file = apply_refactoring(code, smells, args.output)
-            print(f"Refactoring angewendet. Ergebnis geschrieben nach: {output_file}")
-            print(f"Anzahl der Vorschläge: {len(smells)}")
-            for i, smell in enumerate(smells, 1):
-                loc = smell.get("location", {})
-                print(f"  {i}. {smell.get('type', 'unknown')}: Zeile {loc.get('start_line', '?')}-{loc.get('end_line', '?')}")
-        except RuntimeError as e:
-            print(f"Fehler beim Anwenden: {e}", file=sys.stderr)
             sys.exit(1)
 
 
