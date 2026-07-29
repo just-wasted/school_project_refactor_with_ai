@@ -418,47 +418,11 @@ def apply_smell(code, smell, verify=True):
     else:
         refactored_code = suggestion
     
-    # Normalisiere die Einrückung des refactored_code
-    # Finde die minimale Einrückung und subtrahiere sie
-    if refactored_code.strip():
-        code_line = refactored_code
-        # Alle Zeilen des Code-Blocks
-        all_lines = refactored_code.split('\n')
-        # Finde die minimale Einrückung (nur nicht-leere Zeilen)
-        min_indent = float('inf')
-        for line in all_lines:
-            if line.strip():
-                indent = len(line) - len(line.lstrip())
-                min_indent = min(min_indent, indent)
-        # Normalisiere alle Zeilen durch Subtraktion der minimalen Einrückung
-        if min_indent > 0 and min_indent != float('inf'):
-            normalized_lines = []
-            for line in all_lines:
-                if line.strip():
-                    normalized_lines.append(line[min_indent:])
-                else:
-                    normalized_lines.append(line)
-            refactored_code = '\n'.join(normalized_lines)
-    
+    # Einfacher Ersatz ohne Einrückungskorrektur - das Modell muss es richtig machen
     # Fall 1: Einfügung (start_line == end_line)
     if start_line == end_line:
         # Füge nach der Zeile start_line ein
         if start_line >= 0 and start_line <= len(lines):
-            # Erhalte die aktuelle Einrückung der Zeile, nach der eingefügt wird
-            if start_line < len(lines):
-                current_line = lines[start_line]
-                indentation = len(current_line) - len(current_line.lstrip())
-                # Wenn die Zeile eine Methode/klasse schließt (z.B. class Definition), 
-                # füge mit gleicher Einrückung + 4 ein
-                if current_line.strip().startswith(('class ', 'def ')):
-                    # Nach einer Klassendefinition oder Methodendefinition: gleiche Einrückung + 4
-                    prefix = ' ' * (indentation + 4)
-                else:
-                    # Standard: gleiche Einrückung
-                    prefix = ' ' * indentation
-                # Füge Prefix zu jeder Zeile des refactored_code hinzu
-                prefixed_lines = [prefix + line if line.strip() else line for line in refactored_code.split('\n')]
-                refactored_code = '\n'.join(prefixed_lines)
             new_lines = lines[:start_line + 1] + [refactored_code] + lines[start_line + 1:]
             proposed_code = '\n'.join(new_lines)
         else:
@@ -467,19 +431,6 @@ def apply_smell(code, smell, verify=True):
     
     # Fall 2: Ersatz (start_line < end_line)
     elif start_line >= 0 and end_line < len(lines):
-        # Erhalte die Einrückung der ersten Zeile im Ersatzbereich
-        if start_line < len(lines):
-            first_line = lines[start_line]
-            indentation = len(first_line) - len(first_line.lstrip())
-            # Füge Prefix zu jeder Zeile des refactored_code hinzu
-            prefixed_lines = []
-            for line in refactored_code.split('\n'):
-                if line.strip():
-                    prefixed_lines.append(' ' * indentation + line)
-                else:
-                    prefixed_lines.append(line)
-            refactored_code = '\n'.join(prefixed_lines)
-        
         # Ersetze den Code von start_line bis end_line durch den refactored_code
         new_lines = lines[:start_line] + [refactored_code] + lines[end_line + 1:]
         proposed_code = '\n'.join(new_lines)
@@ -589,7 +540,7 @@ def apply_all(code, smells, output_file, file_path=None):
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(modified_code)
         print(f"Alle {applied_count} von {len(smells)} Vorschlaegen erfolgreich angewendet.")
-        return output_file
+        return applied_count
     except PermissionError:
         print(f"Fehler: Keine Schreibrechte fuer {output_file}")
         print("Bitte waehle einen anderen Ausgabepfad oder aendere die Berechtigungen.")
@@ -648,33 +599,58 @@ def main():
     if not check_model(args.model):
         print(f"Warnung: Modell '{args.model}' nicht verfügbar.", file=sys.stderr)
 
-    try:
-        result = call_ollama(code, args.model, args.temperature)
-    except RuntimeError as e:
-        print(f"API-Fehler: {e}", file=sys.stderr)
+    max_retries = 3
+    retry_count = 0
+    all_skipped = False
+    
+    while retry_count < max_retries:
+        try:
+            result = call_ollama(code, args.model, args.temperature)
+        except RuntimeError as e:
+            print(f"API-Fehler: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        smells = extract_smells(result)
+        if not smells:
+            print("Keine Refactoring-Vorschläge gefunden.")
+            sys.exit(0)
+
+        if args.json:
+            print(format_output(result, "json"))
+            break
+        elif args.auto_apply:
+            output_file = args.output if args.output else args.file
+            try:
+                applied_count = apply_all(code, smells, output_file, file_path=args.file)
+                # Pruefe ob alle Vorschlaege uebersprungen wurden
+                if applied_count == 0:
+                    all_skipped = True
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Alle Vorschlaege hatten Syntax-Fehler. Versuche es nochmal ({retry_count}/{max_retries})...")
+                        continue
+                    else:
+                        print(f"Alle {max_retries} Versuche fehlgeschlagen. Alle Vorschlaege hatten Syntax-Fehler.")
+                        print("Bitte pruefe die KI-Antworten oder passe den System-Prompt an.")
+                        sys.exit(1)
+                break
+            except RuntimeError as e:
+                print(f"Fehler: {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            output_file = args.output if args.output else args.file
+            try:
+                result_code = apply_interactive(code, smells, output_file, file_path=args.file)
+                if result_code is None:
+                    sys.exit(1)
+                break
+            except RuntimeError as e:
+                print(f"Fehler: {e}", file=sys.stderr)
+                sys.exit(1)
+    
+    if retry_count >= max_retries and all_skipped:
+        print(f"Alle {max_retries} Versuche fehlgeschlagen.")
         sys.exit(1)
-
-    smells = extract_smells(result)
-    if not smells:
-        print("Keine Refactoring-Vorschläge gefunden.")
-        sys.exit(0)
-
-    if args.json:
-        print(format_output(result, "json"))
-    elif args.auto_apply:
-        output_file = args.output if args.output else args.file
-        try:
-            apply_all(code, smells, output_file, file_path=args.file)
-        except RuntimeError as e:
-            print(f"Fehler: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        output_file = args.output if args.output else args.file
-        try:
-            apply_interactive(code, smells, output_file, file_path=args.file)
-        except RuntimeError as e:
-            print(f"Fehler: {e}", file=sys.stderr)
-            sys.exit(1)
 
 
 if __name__ == "__main__":
