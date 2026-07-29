@@ -66,12 +66,32 @@ SYSTEM_PROMPT = load_system_prompt()
 
 
 def create_backup(file_path):
-    """Erstelle nur-lesbare Backup-Kopie der Originaldatei."""
-    backup_dir = os.path.join(os.path.dirname(file_path), BACKUP_DIR)
-    os.makedirs(backup_dir, exist_ok=True)
+    """Erstelle nur-lesbare Backup-Kopie der Originaldatei.
     
+    Backups werden im Projekt-Root-Verzeichnis (neben src/) gespeichert,
+    um Berechtigungsprobleme mit nur-lesbaren Quelldateien zu vermeiden.
+    """
+    # Verwende das Parent-Verzeichnis von src/ als Backup-Root
+    # Annahme: file_path ist z.B. code_smells/service.py
+    # Projekt-Root ist dann: os.path.dirname(os.path.dirname(src/))
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(src_dir)
+    backup_dir = os.path.join(project_root, BACKUP_DIR)
+    
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+    except PermissionError:
+        # Falls auch Projekt-Root kein Schreibrecht hat, verwende /tmp
+        backup_dir = os.path.join("/tmp", BACKUP_DIR)
+        os.makedirs(backup_dir, exist_ok=True)
+    
+    # Erzeuge einen einzigartigen Dateinamen mit Timestamp und relativem Pfad
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = os.path.join(backup_dir, f"{timestamp}_{os.path.basename(file_path)}")
+    rel_path = os.path.relpath(file_path, project_root)
+    # Ersetze Verzeichnis-Trenner für Dateinamen
+    safe_rel_path = rel_path.replace("/", "_").replace("\\", "_")
+    backup_filename = f"{timestamp}_{safe_rel_path}"
+    backup_path = os.path.join(backup_dir, backup_filename)
     
     shutil.copy2(file_path, backup_path)
     os.chmod(backup_path, 0o444)
