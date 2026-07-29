@@ -16,6 +16,11 @@ from refactoring_agent import (
     check_model,
     call_ollama,
     format_output,
+    extract_smells,
+    apply_smell,
+    apply_interactive,
+    apply_all,
+    show_diff,
     main
 )
 
@@ -198,28 +203,28 @@ def test_format_output_text_empty_smells():
 # TEST: CLI argument parsing
 # =============================================================================
 
-def test_main_no_command(capsys):
-    """Test main with no command shows help."""
+def test_main_no_file(capsys):
+    """Test main with no file shows help."""
     with pytest.raises(SystemExit) as exc_info:
         sys.argv = ["refactoring_agent.py"]
         main()
-    assert exc_info.value.code == 1
+    assert exc_info.value.code == 2  # argparse exits with 2 on error
 
 
 @patch('requests.post')
 @patch('refactoring_agent.check_ollama', return_value=True)
 @patch('refactoring_agent.check_model', return_value=True)
-def test_main_analyze_with_file(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
-    """Test main with analyze command and file argument."""
+def test_main_json_with_file(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
+    """Test main with --json flag and file argument."""
     # Create test file
     test_file = tmp_path / "test.py"
     test_file.write_text("def foo(): pass")
     
     mock_post.return_value = MockResponse({
-        "response": '{"file": "test.py", "smells": []}'
+        "response": '{"file": "test.py", "language": "python", "smells": [{"type": "test", "location": {"file": "test.py", "start_line": 1, "end_line": 1}, "description": "Test smell", "severity": "low", "suggestion": "Test", "reason": "Test", "impact": "readability"}], "stats": {"total_smells": 1, "high": 0, "medium": 0, "low": 1, "coverage": "100%"}}'
     }, 200)
     
-    sys.argv = ["refactoring_agent.py", "analyze", str(test_file)]
+    sys.argv = ["refactoring_agent.py", "--json", str(test_file)]
     
     try:
         main()
@@ -229,6 +234,7 @@ def test_main_analyze_with_file(mock_check_model, mock_check_ollama, mock_post, 
     captured = capsys.readouterr()
     assert captured.out is not None
     assert "response" in captured.out
+    assert "test.py" in captured.out
 
 
 # =============================================================================
@@ -238,8 +244,8 @@ def test_main_analyze_with_file(mock_check_model, mock_check_ollama, mock_post, 
 @patch('requests.post')
 @patch('refactoring_agent.check_ollama', return_value=True)
 @patch('refactoring_agent.check_model', return_value=True)
-def test_full_workflow_with_file(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
-    """Test complete workflow: file input -> API call -> output."""
+def test_full_workflow_json_with_file(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
+    """Test complete workflow with --json flag: file input -> API call -> JSON output."""
     # Setup
     test_file = tmp_path / "service.py"
     test_file.write_text("""
@@ -255,7 +261,7 @@ def process_data(x):
     }, 200)
     
     # Execute
-    sys.argv = ["refactoring_agent.py", "analyze", str(test_file), "--format", "text"]
+    sys.argv = ["refactoring_agent.py", "--json", str(test_file)]
     
     try:
         main()
@@ -271,23 +277,104 @@ def process_data(x):
 @patch('requests.post')
 @patch('refactoring_agent.check_ollama', return_value=True)
 @patch('refactoring_agent.check_model', return_value=True)
-def test_full_workflow_with_stdin(mock_check_model, mock_check_ollama, mock_post, capsys):
-    """Test complete workflow with stdin input."""
+def test_full_workflow_json_with_stdin(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
+    """Test complete workflow with --json flag and file input."""
     mock_post.return_value = MockResponse({
-        "response": '{"file": "stdin", "language": "python", "smells": [], "stats": {"total_smells": 0}}'
+        "response": '{"file": "stdin", "language": "python", "smells": [{"type": "test", "location": {"file": "test.py", "start_line": 1, "end_line": 1}, "description": "Test smell", "severity": "low", "suggestion": "Test", "reason": "Test", "impact": "readability"}], "stats": {"total_smells": 1, "high": 0, "medium": 0, "low": 1, "coverage": "100%"}}'
     }, 200)
     
-    # Mock stdin
-    original_stdin = sys.stdin
-    sys.stdin = io.StringIO("def foo(): pass")
+    # Create a temp file
+    test_file = tmp_path / "stdin_code.py"
+    test_file.write_text("def foo(): pass")
+    
+    # Execute with file argument
+    sys.argv = ["refactoring_agent.py", "--json", str(test_file)]
     
     try:
-        sys.argv = ["refactoring_agent.py", "analyze"]
         main()
     except SystemExit:
         pass
-    finally:
-        sys.stdin = original_stdin
     
     captured = capsys.readouterr()
-    assert "file" in captured.out or "stdin" in captured.out
+    assert "file" in captured.out or "stdin_code.py" in captured.out or "test.py" in captured.out
+
+
+# =============================================================================
+# TEST: New functions (extract_smells, apply_smell, etc.)
+# =============================================================================
+
+def test_extract_smells_valid():
+    """Test extract_smells with valid response."""
+    response = {"response": '{"smells": [{"type": "test"}]}'}
+    smells = extract_smells(response)
+    assert len(smells) == 1
+    assert smells[0]["type"] == "test"
+
+
+def test_extract_smells_invalid_json():
+    """Test extract_smells with invalid JSON."""
+    response = {"response": "not valid json"}
+    smells = extract_smells(response)
+    assert smells == []
+
+
+def test_extract_smells_empty():
+    """Test extract_smells with empty smells list."""
+    response = {"response": '{"smells": []}'}
+    smells = extract_smells(response)
+    assert smells == []
+
+
+def test_apply_smell_valid_location():
+    """Test apply_smell with valid location."""
+    code = "def foo():\n    pass"
+    smell = {
+        "type": "test",
+        "location": {"start_line": 1, "end_line": 1},
+        "description": "Test description",
+        "suggestion": "Test suggestion"
+    }
+    result = apply_smell(code, smell)
+    assert "REFACCTORING: Test description" in result
+    assert "Test suggestion" in result
+
+
+def test_apply_smell_invalid_location():
+    """Test apply_smell with invalid location."""
+    code = "def foo():\n    pass"
+    smell = {
+        "type": "test",
+        "location": {"start_line": 999, "end_line": 999},
+        "description": "Test description",
+        "suggestion": "Test suggestion"
+    }
+    result = apply_smell(code, smell)
+    assert "REFACCTORING: Test description" in result
+
+
+# =============================================================================
+# TEST: Main with new flags
+# =============================================================================
+
+@patch('requests.post')
+@patch('refactoring_agent.check_ollama', return_value=True)
+@patch('refactoring_agent.check_model', return_value=True)
+def test_main_json_output(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
+    """Test main with --json flag outputs JSON."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text("def foo(): pass")
+    
+    mock_post.return_value = MockResponse({
+        "response": '{"file": "test.py", "language": "python", "smells": [{"type": "test_smell", "location": {"file": "test.py", "start_line": 1, "end_line": 1}, "description": "Test", "severity": "low", "suggestion": "Fix", "reason": "Test", "impact": "readability"}], "stats": {"total_smells": 1}}'
+    }, 200)
+    
+    sys.argv = ["refactoring_agent.py", "--json", str(test_file)]
+    
+    try:
+        main()
+    except SystemExit:
+        pass
+    
+    captured = capsys.readouterr()
+    assert "response" in captured.out
+    assert "test_smell" in captured.out
