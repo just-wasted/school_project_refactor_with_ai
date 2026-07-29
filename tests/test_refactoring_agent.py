@@ -3,11 +3,12 @@
 import pytest
 import io
 import sys
+import os
 from unittest.mock import patch, MagicMock
 import requests
 
 # Add src to path for imports
-sys.path.insert(0, sys.path[0] + '/../src')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from refactoring_agent import (
     read_code,
@@ -205,23 +206,29 @@ def test_main_no_command(capsys):
     assert exc_info.value.code == 1
 
 
-def test_main_analyze_with_file(tmp_path, capsys):
+@patch('requests.post')
+@patch('refactoring_agent.check_ollama', return_value=True)
+@patch('refactoring_agent.check_model', return_value=True)
+def test_main_analyze_with_file(mock_check_model, mock_check_ollama, mock_post, tmp_path, capsys):
     """Test main with analyze command and file argument."""
     # Create test file
     test_file = tmp_path / "test.py"
     test_file.write_text("def foo(): pass")
     
-    with pytest.raises(SystemExit) as exc_info:
-        with patch('requests.post') as mock_post:
-            mock_post.return_value = MockResponse({
-                "response": '{"file": "test.py", "smells": []}'
-            }, 200)
-            with patch('refactoring_agent.check_ollama', return_value=True):
-                with patch('refactoring_agent.check_model', return_value=True):
-                    sys.argv = ["refactoring_agent.py", "analyze", str(test_file)]
-                    main()
-    # Should not exit with error if everything is mocked
-    # Note: This will still exit because of stdout capture, need to adjust
+    mock_post.return_value = MockResponse({
+        "response": '{"file": "test.py", "smells": []}'
+    }, 200)
+    
+    sys.argv = ["refactoring_agent.py", "analyze", str(test_file)]
+    
+    try:
+        main()
+    except SystemExit:
+        pass
+    
+    captured = capsys.readouterr()
+    assert captured.out is not None
+    assert "response" in captured.out
 
 
 # =============================================================================
