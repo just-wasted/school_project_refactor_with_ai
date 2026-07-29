@@ -26,40 +26,10 @@ def load_system_prompt():
         with open(SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as f:
             return f.read().strip()
     except FileNotFoundError:
-        # Fallback-Prompt falls Datei nicht gefunden
-        prompt_lines = [
-            "Du bist ein Code-Refactoring-Spezialist. Refaktoriere ITERATIV ",
-            "mit EINER MINIMALEN ÄNDERUNG PRO SCHRITT.",
-            "",
-            "HÄRTESTE REGELN:",
-            "- PRO VORSCHLAG NUR EINE ÄNDERUNG",
-            "- JEDER SCHRITT MUSS DEN CODE IN GÜLTIGEM ZUSTAND HINTERLASSEN",
-            "- DAS EXTERNE VERHALTEN DARF SICH NIEMALS ÄNDERN",
-            "- GIB IMMER ALLE ITERATIVEN SCHRITTE FÜR JEDEN CODE SMELL ZURÜCK",
-            "",
-            "VERIFIZIERUNGSPFLICHT:",
-            "- Jeder suggestion MUSS syntaktisch gültigen Python-Code enthalten",
-            "- Überprüfe Einrückung, vollständige Blöcke, geschlossene Strings",
-            "- Ungültiger Code wird automatisch übersprungen",
-            "",
-            "LOCATION-REGELN:",
-            "- start_line MUSS <= end_line sein",
-            "- ERSETZEN: location = {start_line: X, end_line: Y} wo X <= Y",
-            "- EINFÜGEN: location = {start_line: N, end_line: N}",
-            "- Location MUSS EXAKT sein",
-            "",
-            "VERBOTEN:",
-            "- KEINE Klassendefinition in suggestion",
-            "- KEINE Imports in suggestion",
-            "- KEINE mehreren logischen Änderungen in einem Schritt",
-            "- KEINE Verhaltensänderung",
-            "",
-            "REFACTORING-MUSTER (ALLE SCHRITTE):",
-            "- Long Method: 4 Schritte (Methode umschreiben + 3 Helfermethoden)",
-            "- Duplicate Code: 3 Schritte (Neue Methode + 2 Aufrufe ersetzen)",
-            "- Magic Numbers: 2 Schritte (Konstante definieren + Verwenden)",
-        ]
-        return "\n".join(prompt_lines)
+        raise RuntimeError(
+            f"System-Prompt-Datei nicht gefunden: {SYSTEM_PROMPT_FILE}\n"
+            "Bitte stelle sicher, dass die Datei src/prompts/system_prompt.md existiert."
+        )
 
 
 SYSTEM_PROMPT = load_system_prompt()
