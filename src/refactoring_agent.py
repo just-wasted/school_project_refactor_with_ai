@@ -163,13 +163,22 @@ def call_ollama(code, model, temperature, error_context=None):
         clean_error = error_context.split('syntax_check_')[0].split('Finaler Code hat Syntax-Fehler:')[-1].strip()
         prompt += f"\n\nFEHLERHINWEIS: {clean_error}\nBitte korrigiere deine Code-Vorschläge so, dass sie syntaktisch gültigen Python-Code erzeugen."
     
+    # Setze Kontextfenster basierend auf dem Modell
+    # gemma4 Modelle unterstützen bis zu 128K, qwen Modelle bis zu 256K
+    if "gemma4" in model:
+        num_ctx = 131072  # 128K für Gemma4
+    elif "qwen3" in model or "qwen2.5" in model:
+        num_ctx = 32768  # 32K für Qwen2.5 (kann bis 256K, aber 32K reicht für <=250 Zeilen)
+    else:
+        num_ctx = 32768  # Default
+    
     payload = {
         "model": model,
         "system": SYSTEM_PROMPT,
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": temperature, "top_p": 0.9, "num_ctx": 32768}
+        "options": {"temperature": temperature, "top_p": 0.9, "num_ctx": num_ctx}
     }
     try:
         response = requests.post(
@@ -554,7 +563,7 @@ def main():
         "--model", default="qwen2.5-coder:7b",
         choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
                  "deepseek-coder:33b", "deepseek-coder:6.7b", 
-                 "devstral:24b", "magicoder:7b"],
+                 "devstral:24b", "magicoder:7b", "gemma4:e2b", "gemma4:9b"],
         help="Ollama-Modell (default: qwen2.5-coder:7b)"
     )
     parser.add_argument(
