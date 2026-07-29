@@ -4,13 +4,26 @@
 import argparse
 import sys
 import json
+import os
 import requests
 import difflib
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 120
 
-SYSTEM_PROMPT = """Du bist ein spezialisierter Refactoring-Agent mit der einzigen Aufgabe,
+# Lade System-Prompt aus externer Datei für bessere Wartbarkeit
+PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+SYSTEM_PROMPT_FILE = os.path.join(PROMPTS_DIR, "system_prompt.md")
+
+
+def load_system_prompt():
+    """Lade den System-Prompt aus der Markdown-Datei."""
+    try:
+        with open(SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        # Fallback-Prompt falls Datei nicht gefunden
+        return """Du bist ein spezialisierter Refactoring-Agent mit der einzigen Aufgabe,
 Code zu analysieren und konkrete Refactoring-Vorschläge als JSON zu generieren.
 Erkenne: Duplikate, lange Methoden (>20 Zeilen), unklare Namen, gemischte Verantwortlichkeiten,
 hohes zyklomatische Komplexität, unnötige Kommentare, Magic Numbers/Strings, zu viele Parameter (>4).
@@ -23,6 +36,9 @@ Regeln:
 3. Erkläre Begründungen kurz
 4. Ändere kein Verhalten
 5. Gib immer den vollständigen refactored Code zurück, nicht nur Beschreibungen"""
+
+
+SYSTEM_PROMPT = load_system_prompt()
 
 
 def read_code(file_path):
