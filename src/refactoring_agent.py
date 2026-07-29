@@ -258,6 +258,16 @@ def show_diff(original, modified, smell):
         print("-" * 70)
 
 
+def apply_interactive_finalize(modified_code, applied_count, output_file):
+    """Hilfsfunktion zum Abschließen des interaktiven Modus."""
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        print(f"\nRefactoring abgeschlossen. {applied_count} Vorschläge angewendet.")
+        print(f"Ergebnis geschrieben nach: {output_file}")
+    return modified_code
+
+
 def apply_smell(code, smell):
     """Wendet einen einzelnen Smell-Vorschlag auf den Code an."""
     lines = code.split('\n')
@@ -311,20 +321,15 @@ def apply_interactive(code, smells, output_file=None):
                 for remaining_smell in smells[smells.index(smell) + 1:]:
                     modified_code = apply_smell(modified_code, remaining_smell)
                     applied_count += 1
-                break
+                # Beende die äußere for-Schleife nach "alle"
+                return apply_interactive_finalize(modified_code, applied_count, output_file)
             elif response in ('q', 'quit', 'exit'):
                 print("Abbruch.")
                 return None
             else:
                 print("Ungültige Eingabe. Bitte j/n/a/q eingeben.")
     
-    if output_file:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(modified_code)
-        print(f"\nRefactoring abgeschlossen. {applied_count} Vorschläge angewendet.")
-        print(f"Ergebnis geschrieben nach: {output_file}")
-    
-    return modified_code
+    return apply_interactive_finalize(modified_code, applied_count, output_file)
 
 
 def apply_all(code, smells, output_file):
