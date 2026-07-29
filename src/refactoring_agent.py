@@ -5,8 +5,10 @@ import argparse
 import sys
 import json
 import os
+import subprocess
 import requests
 import difflib
+import shutil
 
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 TIMEOUT = 120
@@ -39,6 +41,33 @@ Regeln:
 
 
 SYSTEM_PROMPT = load_system_prompt()
+
+
+def has_bat():
+    """Prüfe ob bat installiert ist."""
+    return shutil.which("bat") is not None
+
+
+def display_diff_with_bat(diff_text):
+    """Zeige den Diff mit bat für Syntax-Highlighting."""
+    try:
+        # bat mit Diff-Highlighting und Zeilennummern
+        process = subprocess.Popen(
+            ["bat", "--paging=never", "--style=plain", "--language=diff"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        stdout, stderr = process.communicate(input=diff_text, timeout=5)
+        if process.returncode == 0:
+            print(stdout, end='')
+        else:
+            # Falls bat fehlschlägt, normale Ausgabe
+            print(diff_text, end='')
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        # bat nicht verfügbar oder Fehler
+        print(diff_text, end='')
 
 
 def read_code(file_path):
@@ -194,18 +223,29 @@ def show_diff(original, modified, smell):
             lineterm="",
             n=0
         )
+        # Generiere den Diff als String
+        diff_lines = []
         for line in diff:
             if line.startswith('+++') or line.startswith('---'):
                 continue
-            if line.startswith('@@'):
-                # Zeige den Header des unified diff mit absoluten Zeilennummern
-                print(f" {line}", end='')
-            elif line.startswith('+') and not line.startswith('++'):
-                print(f"+{line[1:]}", end='')
-            elif line.startswith('-') and not line.startswith('--'):
-                print(f"-{line[1:]}", end='')
-            else:
-                print(f" {line}", end='')
+            diff_lines.append(line)
+        
+        diff_text = ''.join(diff_lines)
+        
+        # Verwende bat für farbige Ausgabe, falls verfügbar
+        if has_bat():
+            display_diff_with_bat(diff_text)
+        else:
+            # Manuelle Farbausgabe mit ANSI-Codes
+            for line in diff_lines:
+                if line.startswith('@@'):
+                    print(f" {line}", end='')
+                elif line.startswith('+') and not line.startswith('++'):
+                    print(f"\033[32m{line}\033[0m", end='')
+                elif line.startswith('-') and not line.startswith('--'):
+                    print(f"\033[31m{line}\033[0m", end='')
+                else:
+                    print(f" {line}", end='')
         print("-" * 70)
 
 
