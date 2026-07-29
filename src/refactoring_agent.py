@@ -560,11 +560,11 @@ def main():
         help="Zieldatei für refaktorierten Code (optional, Standard: Originaldatei überscheiben)"
     )
     parser.add_argument(
-        "--model", default="qwen2.5-coder:7b",
-        choices=["qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
+        "--model", default="gemma4:e2b",
+        choices=["gemma4:e2b", "gemma4:9b", "qwen2.5-coder:7b", "qwen3-coder:30b", "qwen3-coder:7b", 
                  "deepseek-coder:33b", "deepseek-coder:6.7b", 
-                 "devstral:24b", "magicoder:7b", "gemma4:e2b", "gemma4:9b"],
-        help="Ollama-Modell (default: qwen2.5-coder:7b)"
+                 "devstral:24b", "magicoder:7b"],
+        help="Ollama-Modell (default: gemma4:e2b)"
     )
     parser.add_argument(
         "--temperature", type=float, default=0.1, help="Kreativität (0.0-1.0)"
