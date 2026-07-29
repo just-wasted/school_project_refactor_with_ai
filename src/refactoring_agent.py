@@ -172,12 +172,12 @@ def apply_interactive(code, smells, output_file=None):
         show_diff(modified_code, proposed_code, smell)
         
         while True:
-            response = input("Anwenden? (j=ja, n=nein, u=überspringen, a=alle, q=abbruch): ").strip().lower()
+            response = input("Anwenden? (j=ja, n=nein/weiter, a=alle, q=abbruch): ").strip().lower()
             if response in ('j', 'y', 'yes', ''):
                 modified_code = proposed_code
                 applied_count += 1
                 break
-            elif response in ('n', 'no', 'u', 'skip'):
+            elif response in ('n', 'no'):
                 break
             elif response in ('a', 'all'):
                 modified_code = proposed_code
@@ -190,7 +190,7 @@ def apply_interactive(code, smells, output_file=None):
                 print("Abbruch.")
                 return None
             else:
-                print("Ungültige Eingabe. Bitte j/n/u/a/q eingeben.")
+                print("Ungültige Eingabe. Bitte j/n/a/q eingeben.")
     
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as f:
