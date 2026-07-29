@@ -32,6 +32,9 @@ VERBOTEN:
 - KEINE mehreren logischen Änderungen in einem Schritt
 - KEINE Verhaltensänderung
 - KEIN FALSCH EINGERÜCKTER CODE
+- KEINE Methodennamen ändern, die von anderem Code aufgerufen werden
+- KEINE neuen Methodenaufrufe einführen, deren Methoden noch nicht existieren
+- NUR den Code im location-Bereich ändern, NICHTS anderes
 
 REFACTORING-MUSTER (ALLE SCHRITTE MÜSSEN ZURÜCKGEGEBEN WERDEN):
 
@@ -71,11 +74,18 @@ Schritt 2 (EINFÜGUNG - location: {"start_line": 3, "end_line": 3}):
         return order is not None
 ```
 
+BEISPIEL FÜR FALSCHE ANWENDUNG (NIEMALS SO MACHEN):
+FALSCH:
+- location: {"start_line": 2, "end_line": 3} mit suggestion, das _save aufruft (existiert nicht)
+- location: {"start_line": 2, "end_line": 5} wenn nur Zeile 2-3 geändert werden soll
+- Methodennamen in location 2-3 ändern, die in location 10-15 aufgerufen werden
+
 ANALYSE-ANFORDERUNGEN:
 1. Analysiere JEDE Methode
 2. Für JEDEN Code Smell: GIB ALLE iterativen Schritte zurück
-3. Beginne mit: Long Method > Duplicate Code > Magic Numbers > Unclear Names
-4. WICHTIG: GIB NICHT NUR SCHRITT 1 ZURÜCK - GIB ALLE SCHRITTE ZURÜCK!
+3. Jeder Schritt MUSS als EIGENSTÄNDIGER smell-Eintrag zurückgegeben werden
+4. Beginne mit: Long Method > Duplicate Code > Magic Numbers > Unclear Names
+5. WICHTIG: GIB NICHT NUR SCHRITT 1 ZURÜCK - GIB ALLE SCHRITTE ZURÜCK!
 
 AUSGABEFORMAT (JSON):
 ```json
@@ -92,8 +102,10 @@ AUSGABEFORMAT (JSON):
 WICHTIG:
 - GIB IMMER ALLE SCHRITTE ZURÜCK, NICHT NUR SCHRITT 1!
 - Jeder Schritt = eine minimale Änderung
-- Location ist IMMER exakt
+- Jeder Schritt = ein smell-Eintrag in der JSON-Ausgabe
+- Location ist IMMER exakt und deckt NUR den zu ändernden Bereich ab
 - suggestion enthält IMMER nur Code für diesen einen Schritt
 - NIEMALS mehrere logische Änderungen in einem Schritt
 - EINRÜCKUNG MUSS IMMER KORREKT SEIN
 - EXTERNES VERHALTEN DARF SICH NIEMALS ÄNDERN
+- KEINE Klassendefinitionen, KEINE Imports in suggestions

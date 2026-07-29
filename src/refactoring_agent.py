@@ -148,7 +148,7 @@ def check_model(model):
         return False
 
 
-def call_ollama(code, model, temperature):
+def call_ollama(code, model, temperature, error_context=None):
     """Call Ollama API with system prompt and code."""
     # Füge Zeilennummern zum Code hinzu
     lines = code.split('\n')
@@ -156,10 +156,15 @@ def call_ollama(code, model, temperature):
     for i, line in enumerate(lines, 1):
         numbered_code += f"{i:4d}: {line}\n"
     
+    prompt = f"Analysiere den folgenden Code MIT ZEILENNUMMERN. Verwende DIESE NUMMERN für start_line und end_line.\n\n```\n{numbered_code}\n```"
+    
+    if error_context:
+        prompt += f"\n\nFEHLER KONTEXT: {error_context}\nKorrigiere deine Vorschläge basierend auf diesem Fehler."
+    
     payload = {
         "model": model,
         "system": SYSTEM_PROMPT,
-        "prompt": f"Analysiere den folgenden Code MIT ZEILENNUMMERN. Verwende DIESE NUMMERN für start_line und end_line.\n\n```\n{numbered_code}\n```",
+        "prompt": prompt,
         "stream": False,
         "format": "json",
         "options": {"temperature": temperature, "top_p": 0.9}
@@ -340,8 +345,16 @@ def show_diff(original, modified, smell):
         print("-" * 70)
 
 
-def apply_interactive_finalize(modified_code, applied_count, output_file):
+def apply_interactive_finalize(modified_code, applied_count, output_file, backup_path=None):
     """Hilfsfunktion zum Abschließen des interaktiven Modus."""
+    # Syntax-Prüfung des finalen Codes
+    is_valid, error = verify_syntax(modified_code)
+    if not is_valid:
+        print(f"\nFehler: Finaler Code hat Syntax-Fehler: {error}")
+        if backup_path:
+            print(f"Backup: {backup_path}")
+        return None
+    
     if output_file:
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -355,7 +368,7 @@ def apply_interactive_finalize(modified_code, applied_count, output_file):
     return modified_code
 
 
-def apply_smell(code, smell, verify=True):
+def apply_smell(code, smell):
     """Wendet einen einzelnen Smell-Vorschlag auf den Code an.
     
     Ersetzt den Code im Location-Bereich (start_line bis end_line) durch den suggestion-Code
@@ -364,10 +377,9 @@ def apply_smell(code, smell, verify=True):
     Args:
         code: Originaler Code
         smell: Smell-Vorschlag mit location und suggestion
-        verify: Falls True, prüfe Syntax des resultierenden Codes
     
     Returns:
-        modifizierter Code, oder Originalcode wenn Syntax-Fehler
+        modifizierter Code
     """
     lines = code.split('\n')
     start_line = smell.get('location', {}).get('start_line', 1) - 1
@@ -408,13 +420,6 @@ def apply_smell(code, smell, verify=True):
     # Fall 3: Location außerhalb des Codes - füge am Ende hinzu
     else:
         proposed_code = code + '\n' + refactored_code
-    
-    # Verifizierung
-    if verify:
-        is_valid, error = verify_syntax(proposed_code)
-        if not is_valid:
-            print(f"Vorschlag uebersprungen: Syntax-Fehler in Zeile {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}: {error}")
-            return code
     
     return proposed_code
 
@@ -469,14 +474,14 @@ def apply_interactive(code, smells, output_file=None, file_path=None):
                         modified_code = proposed
                         applied_count += 1
                 # Beende die Schleife
-                return apply_interactive_finalize(modified_code, applied_count, output_file)
+                return apply_interactive_finalize(modified_code, applied_count, output_file, backup_path)
             elif response in ('q', 'quit', 'exit'):
                 print("Abbruch.")
                 return None
             else:
                 print("Ungültige Eingabe. Bitte j/n/a/q eingeben.")
     
-    return apply_interactive_finalize(modified_code, applied_count, output_file)
+    return apply_interactive_finalize(modified_code, applied_count, output_file, backup_path)
 
 
 def apply_all(code, smells, output_file, file_path=None):
@@ -505,6 +510,13 @@ def apply_all(code, smells, output_file, file_path=None):
         if proposed_code != modified_code:
             modified_code = proposed_code
             applied_count += 1
+    
+    # Syntax-Prüfung des finalen Codes
+    is_valid, error = verify_syntax(modified_code)
+    if not is_valid:
+        print(f"Fehler: Finaler Code hat Syntax-Fehler: {error}")
+        print(f"Backup: {backup_path}")
+        raise RuntimeError("Finaler Code ist nicht syntaktisch gueltig")
     
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -572,10 +584,11 @@ def main():
     max_retries = 3
     retry_count = 0
     all_skipped = False
+    last_error = None
     
     while retry_count < max_retries:
         try:
-            result = call_ollama(code, args.model, args.temperature)
+            result = call_ollama(code, args.model, args.temperature, last_error)
         except RuntimeError as e:
             print(f"API-Fehler: {e}", file=sys.stderr)
             sys.exit(1)
@@ -595,6 +608,7 @@ def main():
                 # Pruefe ob alle Vorschlaege uebersprungen wurden
                 if applied_count == 0:
                     all_skipped = True
+                    last_error = "Alle Vorschlaege wurden uebersprungen (Syntax-Fehler in jeder Aenderung)"
                     retry_count += 1
                     if retry_count < max_retries:
                         print(f"Alle Vorschlaege hatten Syntax-Fehler. Versuche es nochmal ({retry_count}/{max_retries})...")
@@ -605,18 +619,45 @@ def main():
                         sys.exit(1)
                 break
             except RuntimeError as e:
-                print(f"Fehler: {e}", file=sys.stderr)
-                sys.exit(1)
+                # Syntax-Fehler im finalen Code - retry
+                last_error = str(e)
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"Fehler: {e}")
+                    print(f"Versuche es nochmal ({retry_count}/{max_retries})...")
+                    continue
+                else:
+                    print(f"Fehler: {e}")
+                    print(f"Alle {max_retries} Versuche fehlgeschlagen.")
+                    sys.exit(1)
         else:
             output_file = args.output if args.output else args.file
             try:
                 result_code = apply_interactive(code, smells, output_file, file_path=args.file)
                 if result_code is None:
-                    sys.exit(1)
+                    # User cancelled or all suggestions skipped
+                    all_skipped = True
+                    last_error = "Interaktive Anwendung wurde abgebrochen oder alle Vorschlaege uebersprungen"
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Alle Vorschlaege hatten Probleme. Versuche es nochmal ({retry_count}/{max_retries})...")
+                        continue
+                    else:
+                        print(f"Alle {max_retries} Versuche fehlgeschlagen.")
+                        sys.exit(1)
                 break
             except RuntimeError as e:
-                print(f"Fehler: {e}", file=sys.stderr)
-                sys.exit(1)
+                # Permission error or other - retry
+                last_error = str(e)
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"Fehler: {e}")
+                    print(f"Versuche es nochmal ({retry_count}/{max_retries})...")
+                    continue
+                else:
+                    print(f"Fehler: {e}")
+                    print(f"Alle {max_retries} Versuche fehlgeschlagen.")
+                    sys.exit(1)
     
     if retry_count >= max_retries and all_skipped:
         print(f"Alle {max_retries} Versuche fehlgeschlagen.")
