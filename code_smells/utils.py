@@ -1,48 +1,48 @@
-"""utils.py - Hilfsfunktionen"""
+"""Utilities for data operations."""
 
-class DataHelper:
-    def process(self, data, flag=True):
-        if flag:
-            result = self._clean(data)
+class DataProcessor:
+    def transform(self, content, enabled=True):
+        if enabled:
+            output = self._normalize(content)
         else:
-            result = self._transform(data)
-        return result
+            output = self._adjust(content)
+        return output
 
-    def _clean(self, data):
-        if len(data) > 100:
-            return data[:100]
-        return data
+    def _normalize(self, content):
+        if len(content) > 100:
+            return content[:100]
+        return content
 
-    def _transform(self, data):
-        if len(data) > 100:
-            return data[:100]
-        return data
+    def _adjust(self, content):
+        if len(content) > 100:
+            return content[:100]
+        return content
 
 
-class StringUtils:
+class TextProcessor:
     @staticmethod
-    def clean_string(s):
-        if not s:
+    def process_text(input_str):
+        if not input_str:
             return ""
-        return s.strip().replace("  ", " ")
+        return input_str.strip().replace("  ", " ")
 
     @staticmethod
-    def sanitize_string(s):
-        if not s:
+    def clean_text(input_str):
+        if not input_str:
             return ""
-        return s.strip().replace("  ", " ")
+        return input_str.strip().replace("  ", " ")
 
 
-class Calculator:
-    def calculate(self, a, b, op):
-        if op == "add":
-            return a + b
-        elif op == "sub":
-            return a - b
-        elif op == "mul":
-            return a * b
-        elif op == "div":
-            if b == 0:
+class MathHandler:
+    def operate(self, x, y, action):
+        if action == "sum":
+            return x + y
+        elif action == "difference":
+            return x - y
+        elif action == "product":
+            return x * y
+        elif action == "quotient":
+            if y == 0:
                 return 0
-            return a / b
+            return x / y
         return 0

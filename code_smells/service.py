@@ -1,73 +1,71 @@
-"""
-Service.py - Zentrale Serviceklasse für Bestellungen
-"""
+"""Service module for order handling."""
 
 import random
 
 
-class CentralService:
-    """Zentrale Service-Klasse für Bestellungen."""
+class ServiceHandler:
+    """Main class for processing requests."""
 
     def __init__(self, db, log, cfg):
         self.db = db
         self.log = log
         self.cfg = cfg
-        self.x = None
-        self.y = None
+        self.a = None
+        self.b = None
 
-    def process_order(self, order, user_id, payment, shipping):
-        if order is None or user_id < 0:
+    def handle_request(self, data, identifier, payment_info, delivery):
+        if data is None or identifier < 0:
             return {"status": "error", "message": "Invalid"}
-        user = self._get_user(user_id)
-        if not self.validate_input(order):
-            return {"status": "error", "message": "Bad order"}
-        if not self.check_data(order):
+        entity = self._fetch_entity(identifier)
+        if not self.check_validity(data):
             return {"status": "error", "message": "Bad data"}
-        if not self._process_payment(payment, order["total"]):
+        if not self.ensure_quality(data):
+            return {"status": "error", "message": "Bad input"}
+        if not self._handle_payment(payment_info, data["amount"]):
             return {"status": "error", "message": "Payment failed"}
-        order_id = self._save(order)
-        self._send_email(user, order_id)
-        return {"status": "success", "order_id": order_id}
+        record_id = self._store(data)
+        self._notify(entity, record_id)
+        return {"status": "success", "record_id": record_id}
 
-    def validate_input(self, data):
-        if data is None:
+    def check_validity(self, content):
+        if content is None:
             return False
-        if "items" not in data:
+        if "entries" not in content:
             return False
-        for item in data["items"]:
-            if item.get("qty", 0) <= 0:
+        for entry in content["entries"]:
+            if entry.get("count", 0) <= 0:
                 return False
         return True
 
-    def check_data(self, data):
-        if data is None:
+    def ensure_quality(self, content):
+        if content is None:
             return False
-        if "items" not in data:
+        if "entries" not in content:
             return False
-        for x in data["items"]:
-            if x.get("qty", 0) < 1:
+        for entry in content["entries"]:
+            if entry.get("count", 0) < 1:
                 return False
         return True
 
-    def _get_user(self, uid):
-        return {"id": uid, "email": "test@example.com"}
+    def _fetch_entity(self, id):
+        return {"id": id, "contact": "user@example.com"}
 
-    def _process_payment(self, pay, amount):
-        if amount <= 0:
+    def _handle_payment(self, pay, total):
+        if total <= 0:
             return False
-        if pay.get("method") == "card":
-            if len(pay.get("num", "")) != 16:
+        if pay.get("mode") == "card":
+            if len(pay.get("number", "")) != 16:
                 return False
         return True
 
-    def _save(self, order):
+    def _store(self, content):
         return random.randint(10000, 99999)
 
-    def _send_email(self, user, oid):
+    def _notify(self, entity, id):
         pass
 
-    def doStuff(self, a, b, c, d, e):
-        result = a + b * 100 + c - d / 50
-        if e:
+    def compute(self, p1, p2, p3, p4, p5):
+        result = p1 + p2 * 100 + p3 - p4 / 50
+        if p5:
             result = result * 1.1
         return result

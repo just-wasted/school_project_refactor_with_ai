@@ -17,15 +17,15 @@ with open(os.path.join(PROMPTS_DIR, "system_prompt_apply.md"), "r", encoding="ut
 def create_backup(fp):
     src_dir = os.path.dirname(os.path.abspath(__file__))
     pr = os.path.dirname(src_dir)
-    bd = os.path.join(pr, BACKUP_DIR)
-    try:
-        os.makedirs(bd, exist_ok=True)
-    except PermissionError:
-        bd = os.path.join("/tmp", BACKUP_DIR)
-        os.makedirs(bd, exist_ok=True)
+    for bd in [os.path.join(pr, BACKUP_DIR), os.path.join("/tmp", BACKUP_DIR)]:
+        try:
+            os.makedirs(bd, exist_ok=True)
+            break
+        except:
+            pass
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     rp = os.path.relpath(fp, pr)
-    bp = os.path.join(bd, f"{ts}_{rp.replace('/', '_').replace('\\', '_')}")
+    bp = os.path.join(bd, f"{ts}_{rp.replace('/', '_').replace(chr(92), '_')}")
     shutil.copy2(fp, bp)
     os.chmod(bp, 0o444)
     return bp
@@ -76,108 +76,70 @@ def check_model(m):
 
 
 def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
+    nctx = 131072 if "gemma4" in model else 32768
+    n_predict = 16384 if "gemma4" in model else 8192
     if mode == "analyze":
         nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
         p = f"Here is the COMPLETE Python file with line numbers:\n\n```\n{nc}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
         system = SYSTEM_PROMPT_ANALYZE
-        use_json_format = True
+        payload = {"model": model, "system": system, "prompt": p, "stream": False,
+                  "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}, "format": "json"}
     else:
         p = f"{apply_instructions}\n\nComplete file code:\n{code}\nApply all selected refactorings."
         system = SYSTEM_PROMPT_APPLY
-        use_json_format = False
-    nctx = 131072 if "gemma4" in model else 32768
-    n_predict = 16384 if "gemma4" in model else 8192
-    payload = {"model": model, "system": system, "prompt": p, "stream": False,
-              "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}}
-    if use_json_format:
-        payload["format"] = "json"
+        payload = {"model": model, "system": system, "prompt": p, "stream": False,
+                  "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}}
     r = requests.post(OLLAMA_URL, headers={"Content-Type": "application/json"},
                     data=json.dumps(payload), timeout=TIMEOUT)
     r.raise_for_status()
     return r.json()
 
 
-def fix_truncated_json(response_text):
-    """Try to fix truncated JSON by finding the closing }] or } of the outer structure."""
-    if not response_text.strip():
+def fix_truncated_json(t):
+    if not t.strip():
         return "{}"
-    
-    # The response is always {"smells": [...]}, so look for the closing }] pattern
-    # Strategy: find the last occurrence of '}]' or '}' that closes the outer object
-    
-    # First try: find '}]' - this closes the smells array and the outer object in one go
-    last_array_close = response_text.rfind('}]')
-    if last_array_close > 0:
-        # Check if this is at the very end or followed by whitespace/newlines
-        remainder = response_text[last_array_close + 2:]
-        if not remainder.strip() or remainder.strip() in ['', '}']:
-            # Find the matching closing brace for the outer object
-            # The pattern is {"smells": [...]}
-            brace_count = 0
-            for i in range(last_array_close + 2, len(response_text)):
-                char = response_text[i]
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == -1:  # Found the closing brace for outer object
-                        return response_text[:i + 1]
-            return response_text[:last_array_close + 2]
-    
-    # Second try: work backwards to find last } outside of strings
-    in_string = False
-    escape_next = False
-    for i in range(len(response_text) - 1, -1, -1):
-        char = response_text[i]
-        
-        if escape_next:
-            escape_next = False
+    in_s = False
+    esc = False
+    for i in range(len(t) - 1, -1, -1):
+        c = t[i]
+        if esc:
+            esc = False
             continue
-            
-        if char == '\\':
-            escape_next = True
+        if c == '\\':
+            esc = True
             continue
-            
-        if char == '"':
-            in_string = not in_string
-            
-        if not in_string and char == '}':
-            return response_text[:i + 1]
-    
+        if c == '"':
+            in_s = not in_s
+        if not in_s and c == '}':
+            return t[:i + 1]
     return "{}"
+
+
+def generate_diff(old_code, new_code):
+    return '\n'.join(difflib.unified_diff(old_code.split('\n'), new_code.split('\n'), lineterm=''))
 
 
 def extract_smells(resp, full_code=""):
     try:
-        response_text = resp.get("response", "{}")
-        # Try to fix truncated JSON
-        if response_text.strip():
+        rt = resp.get("response", "{}")
+        if rt.strip():
             try:
-                parsed = json.loads(response_text)
-            except json.JSONDecodeError:
-                response_text = fix_truncated_json(response_text)
-                parsed = json.loads(response_text)
+                parsed = json.loads(rt)
+            except:
+                rt = fix_truncated_json(rt)
+                parsed = json.loads(rt)
         else:
             parsed = {}
-        
-        # Handle both list and dict formats
-        if isinstance(parsed, list):
-            smells = parsed
-        elif isinstance(parsed, dict):
-            smells = parsed.get("smells", [])
-        else:
-            smells = []
-        
+        smells = parsed if isinstance(parsed, list) else parsed.get("smells", [])
         if full_code:
-            full_lines = full_code.split('\n')
+            fl = full_code.split('\n')
             for s in smells:
                 loc = s.get("location", {})
-                start = loc.get("start_line", 0)
-                end = loc.get("end_line", 0)
-                if 1 <= start <= end <= len(full_lines):
-                    s["old_code"] = '\n'.join(full_lines[start-1:end])
+                st = loc.get("start_line", 0)
+                en = loc.get("end_line", 0)
+                if 1 <= st <= en <= len(fl):
+                    s["old_code"] = '\n'.join(fl[st-1:en])
                 fix_indentation(s, full_code)
-                # Generate diff locally if model didn't provide a proper one
                 if not s.get("diff") or s.get("old_code") == s.get("new_code"):
                     old = s.get("old_code", "")
                     new = s.get("new_code", "")
@@ -188,39 +150,26 @@ def extract_smells(resp, full_code=""):
         return []
 
 
-def generate_diff(old_code, new_code):
-    old_lines = old_code.split('\n')
-    new_lines = new_code.split('\n')
-    diff = difflib.unified_diff(old_lines, new_lines, lineterm='')
-    return '\n'.join(diff)
-
-
 def fix_indentation(smell, full_code):
     old = smell.get('old_code', '')
     new = smell.get('new_code', '')
     if not old or not new or old == new:
         return
-    old_lines = old.split('\n')
-    new_lines = new.split('\n')
-    if not old_lines or not new_lines:
+    ol = old.split('\n')
+    nl = new.split('\n')
+    if not ol or not nl:
         return
-    first_old = old_lines[0]
-    base_indent = len(first_old) - len(first_old.lstrip())
-    if base_indent <= 0:
+    base = len(ol[0]) - len(ol[0].lstrip())
+    if base <= 0:
         return
-    # Find minimum indentation in new_code to normalize
-    new_indents = [len(line) - len(line.lstrip()) for line in new_lines if line.strip()]
-    min_new_indent = min(new_indents) if new_indents else 0
-    new_lines_fixed = []
-    for line in new_lines:
+    mins = min([len(l) - len(l.lstrip()) for l in nl if l.strip()] or [0])
+    nlf = []
+    for line in nl:
         if line.strip():
-            # Normalize: subtract min indentation, then add base
-            normalized_indent = len(line) - len(line.lstrip()) - min_new_indent
-            total_indent = base_indent + normalized_indent
-            new_lines_fixed.append(' ' * total_indent + line.lstrip())
+            nlf.append(' ' * (base + len(line) - len(line.lstrip()) - mins) + line.lstrip())
         else:
-            new_lines_fixed.append(line)
-    smell['new_code'] = '\n'.join(new_lines_fixed)
+            nlf.append(line)
+    smell['new_code'] = '\n'.join(nlf)
 
 
 def display_smell(s, i):
@@ -267,43 +216,31 @@ def run_pyflakes(code):
     except:
         return True, ""
 
+
 def apply_refactoring(code, smells, sel, model, temp):
     if not sel:
         return code
-    selected_smells = [smells[x] for x in sel]
+    ss = [smells[x] for x in sel]
     inst = "YOU ARE APPLYING SELECTED REFACTORINGS. YOUR ABSOLUTE PRIORITY IS: EXTERNAL BEHAVIOR MUST NEVER CHANGE.\n"
     inst += "RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO EXPLANATIONS.\n"
-    inst += "Remove old methods that are replaced by new helper methods.\n\n"
-    inst += "Selected refactorings to apply:\n"
-    for i, s in enumerate(selected_smells, 1):
+    inst += "Remove old methods that are replaced by new helper methods.\n\nSelected refactorings to apply:\n"
+    for i, s in enumerate(ss, 1):
         loc = s.get("location", {})
-        inst += f"{i}. Type: {s.get('type', 'unknown')}\n"
-        inst += f"   Lines: {loc.get('start_line', '?')}-{loc.get('end_line', '?')}\n"
-        inst += f"   Old code:\n{s.get('old_code', '')}\n"
-        inst += f"   New code:\n{s.get('new_code', '')}\n\n"
-    inst += "CRITICAL RULES:\n"
-    inst += "- Apply ALL selected changes atomically\n"
-    inst += "- REMOVE old methods that are replaced\n"
-    inst += "- NEVER change behavior not explicitly in selected refactorings\n"
-    inst += "- Preserve ALL validation, error messages, return values\n"
+        inst += f"{i}. Type: {s.get('type', 'unknown')}\nLines: {loc.get('start_line', '?')}-{loc.get('end_line', '?')}\n"
+        inst += f"Old code:\n{s.get('old_code', '')}\nNew code:\n{s.get('new_code', '')}\n\n"
+    inst += "CRITICAL RULES:\n- Apply ALL selected changes atomically\n- REMOVE old methods that are replaced\n"
+    inst += "- NEVER change behavior not explicitly in selected refactorings\n- Preserve ALL validation, error messages, return values\n"
     inst += "- RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO OTHER TEXT.\n"
-    
     result = call_ollama(code, model, temp, mode="apply", apply_instructions=inst)
-    result_text = result.get("response", "")
-    # Clean up markdown formatting if present
-    for marker in ['```python', '```Python', '```']:
-        result_text = result_text.replace(marker, '').strip()
-    # Try to parse as JSON first (some models might still return JSON)
+    rt = result.get("response", "")
+    for m in ['```python', '```Python', '```']:
+        rt = rt.replace(m, '').strip()
     try:
-        parsed = json.loads(result_text)
-        if isinstance(parsed, dict):
-            result_text = parsed.get("code", result_text)
-        elif isinstance(parsed, str):
-            result_text = parsed
-    except (json.JSONDecodeError, TypeError):
+        parsed = json.loads(rt)
+        rt = parsed.get("code", rt) if isinstance(parsed, dict) else (parsed if isinstance(parsed, str) else rt)
+    except:
         pass
-    
-    return result_text
+    return rt
 
 
 def main():
@@ -360,7 +297,6 @@ def main():
     try:
         print("\nApplying refactorings (model validates its own output)...")
         rc = apply_refactoring(code, smells, selected, args.model, args.temperature)
-        
         print("Running syntax check...")
         ok, err = verify_syntax(rc)
         if not ok:
@@ -369,18 +305,15 @@ def main():
             if backup_path:
                 print(f"Backup: {backup_path}")
             sys.exit(1)
-        
         print("Running pyflakes...")
-        ok, flakes_err = run_pyflakes(rc)
+        ok, fe = run_pyflakes(rc)
         if not ok:
-            print(f"  Pyflakes issues found:\n{flakes_err}")
+            print(f"  Pyflakes issues found:\n{fe}")
             print("  Model should have fixed these!")
             if backup_path:
                 print(f"Backup: {backup_path}")
-            # Don't exit - just warn, as model should have handled this
         else:
             print("  Pyflakes: OK")
-        
         with open(of, 'w', encoding='utf-8') as f:
             f.write(rc)
         print(f"\nRefactoring complete. {len(selected)} Vorschlag/Vorschläge angewendet: {of}")

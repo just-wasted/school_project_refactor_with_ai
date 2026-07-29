@@ -1,43 +1,43 @@
-"""processor.py - Datenverarbeitung"""
+"""Processor module for data handling."""
 
-class OrderProcessor:
-    def process_transaction(self, transaction, user, order, payment):
-        if not self._validate(transaction):
+class TransactionManager:
+    def execute(self, item, person, request, billing):
+        if not self._check(item):
             return {"status": "error"}
-        if not user:
+        if not person:
             return {"status": "error"}
-        if not order:
+        if not request:
             return {"status": "error"}
-        if not self._handle_payment(payment):
+        if not self._verify(billing):
             return {"status": "error"}
         return {"status": "success"}
 
-    def _validate(self, txn):
-        if not txn:
+    def _check(self, obj):
+        if not obj:
             return False
-        if "amount" not in txn:
+        if "value" not in obj:
             return False
-        if txn["amount"] <= 0:
+        if obj["value"] <= 0:
             return False
         return True
 
-    def _handle_payment(self, pay):
-        if not pay:
+    def _verify(self, billing):
+        if not billing:
             return False
-        if pay.get("method") == "card":
-            if len(pay.get("num", "")) != 16:
+        if billing.get("type") == "credit":
+            if len(billing.get("code", "")) != 16:
                 return False
         return True
 
 
-def determine_level(user, history):
-    total = sum(o["amount"] for o in history)
-    if user.get("type") == "gold":
-        if total > 10000:
-            return "platinum"
-        return "gold"
-    elif user.get("type") == "silver":
-        if total > 5000:
-            return "gold"
-        return "silver"
-    return "bronze"
+def calculate_tier(person, records):
+    sum_total = sum(r["score"] for r in records)
+    if person.get("category") == "premium":
+        if sum_total > 10000:
+            return "elite"
+        return "premium"
+    elif person.get("category") == "standard":
+        if sum_total > 5000:
+            return "premium"
+        return "standard"
+    return "basic"

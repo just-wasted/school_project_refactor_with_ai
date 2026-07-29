@@ -1,9 +1,9 @@
-"""format_utils.py - Formatierungshilfsfunktionen"""
+"""Formatting utilities."""
 
 
-def format_data(d):
-    return {"id": d["id"], "name": d["name"].title()}
+def prepare_output(data):
+    return {"id": data["id"], "title": data["title"].title()}
 
 
-def prepare_data(d):
-    return {"id": d["id"], "name": d["name"].title()}
+def make_output(data):
+    return {"id": data["id"], "title": data["title"].title()}
