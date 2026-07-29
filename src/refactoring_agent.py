@@ -25,29 +25,16 @@ def load_system_prompt():
             return f.read().strip()
     except FileNotFoundError:
         # Fallback-Prompt falls Datei nicht gefunden
-        return """Du bist ein erfahrener Software-Architekt, spezialisiert auf systematisches Code-Refactoring, strukturelle Optimierung und den Abbau von technischer Schuld. Dein Ziel ist es, die Lesbarkeit, Wartbarkeit und Performance des Codes zu verbessern, ohne dessen externes Verhalten zu verändern.
+        return """Du bist ein Code-Refactoring-Spezialist. Deine Aufgabe: Analysiere Code und gib PRÄZISE JSON-Vorschläge zurück.
 
-Kernregeln:
-- Verhaltenserhaltung (Behavior Preservation): Stelle immer sicher, dass das externe Verhalten des Codes exakt gleich bleibt. Behebe während eines Refactoring-Durchlaufs keine unaufgeforderten Fehler und füge keine neuen Funktionen hinzu.
-- Schrittweise Ausführung: Refaktoriere niemals eine gesamte Codebasis oder große Dateien auf einmal. Teile das Refactoring in atomare, logische Teilschritte auf.
-- Überprüfung durch Tests: Führe vorhandene Tests vor dem Start, nach jedem einzelnen atomaren Schritt und ganz am Ende des Refactoring-Prozesses aus.
-- Präzise Änderungen: Ändere NUR den Code im angegebenen Location-Bereich (start_line bis end_line). Ändere niemals Imports, Class-Docstrings oder andere Methoden, die nicht zum angegebenen Bereich gehören.
+REGELN:
+1. Jeder smell-Eintrag behandelt EIN Problem an EINER Methode/Funktion.
+2. location.start_line und end_line MÜSSEN die EXAKTEN Zeilen dieser Methode/Funktion abdecken.
+3. suggestion MUSS EINEN Code-Block ```python...``` enthalten, der NUR diese Methode/Funktion ersetzt.
+4. VERBOTEN: Klassendefinitionen, Imports, andere Methoden, leere suggestions.
 
-Refactoring-Arbeitsablauf:
-1. Analysephase: Bevor du Dateien änderst, analysiere den Code auf Code-Smells.
-2. Ausführungsstrategie: Identifiziere den Ziel-Codeblock EXAKT im Bereich start_line bis end_line. Wende die Änderung NUR auf den angegebenen Bereich an. Lass alle anderen Code-Teile UNVERÄNDERT.
-3. Anforderungen an die Ausgabe: Präsentiere einen sauberen Diff-Vergleich oder den aktualisierten Dateiinhalt.
-
-WICHTIGE REGELN FÜR DIE CODE-GENERIERUNG:
-- Wenn du eine Methode refaktorierst, ändere NUR diese Methode. Wiederhole NIEMALS die gesamte Klasse.
-- Wenn du Code in einer Methode änderst, behalte alle bestehenden Imports, Class-Docstrings und andere Methoden bei.
-- Gib IMMER den vollständigen, refaktorierten Code-Block zurück, der den alten Code im Location-Bereich ersetzt.
-- Wenn du eine Methode aufteilst, füge die neuen Hilfsmethoden im suggestion Feld mit ein.
-
-Ausgabeformat für die KI-Antwort (JSON):
-{"file":"...","language":"...","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":N},"description":"...","severity":"high|medium|low","suggestion":"<full_refactored_code>...<full_refactored_code>","reason":"...","impact":"readability|maintainability|testability|performance"}],"stats":{"total_smells":N,"high":N,"medium":N,"low":N,"coverage":"X%"}}
-
-Wichtig: Gib im suggestion Feld immer vollständige Code-Beispiele als ```python...``` Block zurück. Ersetze den betroffenen Code komplett. Ändere NUR den Code im Location-Bereich."""
+JSON-Format:
+{"file":"...","language":"Python","smells":[{"type":"...","location":{"file":"...","start_line":N,"end_line":M},"description":"...","severity":"high|medium|low","suggestion":"```python\\n...\\n```","reason":"...","impact":"readability|maintainability|testability|performance"}],"stats":{"total_smells":X,"high":A,"medium":B,"low":C,"coverage":"Y%"}}"""
 
 
 SYSTEM_PROMPT = load_system_prompt()
@@ -114,10 +101,16 @@ def check_model(model):
 
 def call_ollama(code, model, temperature):
     """Call Ollama API with system prompt and code."""
+    # Füge Zeilennummern zum Code hinzu
+    lines = code.split('\n')
+    numbered_code = ''
+    for i, line in enumerate(lines, 1):
+        numbered_code += f"{i:4d}: {line}\n"
+    
     payload = {
         "model": model,
         "system": SYSTEM_PROMPT,
-        "prompt": f"Analysiere den folgenden Code:\n\n```\n{code}\n```",
+        "prompt": f"Analysiere den folgenden Code MIT ZEILENNUMMERN. Verwende DIESE NUMMERN für start_line und end_line.\n\n```\n{numbered_code}\n```",
         "stream": False,
         "format": "json",
         "options": {"temperature": temperature, "top_p": 0.9}
