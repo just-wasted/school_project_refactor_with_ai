@@ -1,228 +1,87 @@
 """
-Service.py - Zentrale Serviceklasse mit multiplen Code Smells
+Service.py - Zentrale Serviceklasse mit Code Smells
 
-Dieses Modul enthält eine zentrale Service-Klasse, die für die Verarbeitung
-von Benutzerdaten, Bestellungen und Zahlungen zuständig ist.
-
-PROBLEME:
-- Lange Methode (process_order() hat > 50 Zeilen)
-- Duplikate (validate_input() und check_data() machen fast das Gleiche)
-- Unklare Namen (x, y, temp, doStuff())
-- Vermischte Verantwortlichkeiten (Bestellung, Zahlung, Benutzer in einer Methode)
-- Magic Numbers (0.1, 100, 50)
-- Zu viele Parameter (> 4 in mehreren Methoden)
+Kompakte Version mit allen wichtigen Problemen:
+- Lange Methode mit vermischten Verantwortlichkeiten
+- Duplikate Code-Blöcke
+- Unklare Variablennamen
+- Magic Numbers
+- Zu viele Parameter
 """
 
-import datetime
-import json
 import random
-import re
 
 
 class CentralService:
-    """
-    Zentrale Service-Klasse für alle Geschäftsvorgänge.
-    
-    Verantwortlich für:
-    - Benutzerverwaltung
-    - Bestellabwicklung
-    - Zahlungsabwicklung
-    - Datenvalidierung
-    - Logging
-    """
+    """Zentrale Service-Klasse für Bestellungen."""
 
-    def __init__(self, db_connection, logger, config, cache, email_service):
-        """
-        Initialisiert den Service mit allen Abhängigkeiten.
-        
-        PROBLEM: Zu viele Parameter (> 4) und unklare Namen (x, y)
-        """
-        self.db = db_connection
-        self.log = logger
-        self.cfg = config
-        self.cache = cache
-        self.email = email_service
-        self.x = None  # PROBLEM: Unklarer Name
-        self.y = None  # PROBLEM: Unklarer Name
+    def __init__(self, db, log, cfg):
+        self.db = db
+        self.log = log
+        self.cfg = cfg
+        self.x = None
+        self.y = None
 
-    def process_order(self, order_data, user_id, payment_info, shipping_address, discount_code=None):
-        """
-        Verarbeitet eine Bestellung von Anfang bis Ende.
-        
-        PROBLEM: Lange Methode (> 50 Zeilen) mit vermischten Verantwortlichkeiten
-        """
-        # PROBLEM: Magic Number
-        if order_data is None or user_id < 0:
-            return {"status": "error", "message": "Invalid input"}
-
-        # Schritt 1: Benutzerdaten abrufen
-        user = self._get_user_by_id(user_id)
-        if user is None:
-            self.log.error(f"User {user_id} not found")
-            return {"status": "error", "message": "User not found"}
-
-        # Schritt 2: Bestelldaten validieren
-        if not self.validate_input(order_data):
-            self.log.error("Invalid order data")
-            return {"status": "error", "message": "Invalid order data"}
-
-        # Schritt 3: Zahlung verarbeiten
-        payment_result = self._process_payment(payment_info, order_data["total"])
-        if not payment_result["success"]:
-            self.log.error(f"Payment failed: {payment_result['message']}")
+    def process_order(self, order, user_id, payment, shipping):
+        if order is None or user_id < 0:
+            return {"status": "error", "message": "Invalid"}
+        user = self._get_user(user_id)
+        if not self.validate_input(order):
+            return {"status": "error", "message": "Bad order"}
+        if not self.check_data(order):
+            return {"status": "error", "message": "Bad data"}
+        if not self._process_payment(payment, order["total"]):
             return {"status": "error", "message": "Payment failed"}
-
-        # Schritt 4: Lagerbestand prüfen
-        for item in order_data["items"]:
-            if not self._check_stock(item["product_id"], item["quantity"]):
-                self.log.error(f"Insufficient stock for {item['product_id']}")
-                return {"status": "error", "message": "Insufficient stock"}
-
-        # Schritt 5: Bestellung in DB speichern
-        order_id = self._save_order(order_data, user_id, payment_info, shipping_address)
-        if not order_id:
-            self.log.error("Failed to save order")
-            return {"status": "error", "message": "Failed to save order"}
-
-        # Schritt 6: Bestätigungs-E-Mail senden
-        self.email.send(
-            to=user["email"],
-            subject="Bestellbestätigung",
-            body=f"Ihre Bestellung #{order_id} wurde bestätigt."
-        )
-
-        # PROBLEM: Magic Number
-        if discount_code and random.random() < 0.1:  # 10% Chance für Rabatt
-            discount = order_data["total"] * 0.1
-            self._apply_discount(order_id, discount)
-
-        # Schritt 7: Cache aktualisieren
-        self.cache.set(f"order_{order_id}", order_data)
-
+        order_id = self._save(order)
+        self._send_email(user, order_id)
         return {"status": "success", "order_id": order_id}
 
     def validate_input(self, data):
-        """
-        Validiert Eingabedaten.
-        
-        PROBLEM: Duplikat von check_data() - fast identische Logik
-        """
         if data is None:
-            return False
-        if not isinstance(data, dict):
             return False
         if "items" not in data:
             return False
-        if not data["items"]:
-            return False
         for item in data["items"]:
-            if "product_id" not in item or "quantity" not in item:
-                return False
-            if item["quantity"] <= 0:  # PROBLEM: Magic Number
+            if item.get("qty", 0) <= 0:
                 return False
         return True
 
-    def check_data(self, input_data):
-        """
-        Überprüft Eingabedaten.
-        
-        PROBLEM: Duplikat von validate_input() - fast identische Logik
-        """
-        if input_data is None:
+    def check_data(self, data):
+        if data is None:
             return False
-        if not isinstance(input_data, dict):
+        if "items" not in data:
             return False
-        if "items" not in input_data:
-            return False
-        if not input_data["items"]:
-            return False
-        for x in input_data["items"]:  # PROBLEM: Unklarer Name (x)
-            if "product_id" not in x or "quantity" not in x:
-                return False
-            if x["quantity"] < 1:  # PROBLEM: Magic Number, anders als in validate_input
+        for x in data["items"]:
+            if x.get("qty", 0) < 1:
                 return False
         return True
 
-    def _get_user_by_id(self, user_id):
-        """Holt Benutzer aus der Datenbank."""
-        # Simulierte DB-Abfrage
-        return {"id": user_id, "name": "Test User", "email": "test@example.com"}
+    def _get_user(self, uid):
+        return {"id": uid, "email": "test@example.com"}
 
-    def _process_payment(self, payment_info, amount):
-        """
-        Verarbeitet Zahlung.
-        
-        PROBLEM: Vermischte Verantwortlichkeiten (Validierung + Verarbeitung)
-        """
-        # PROBLEM: Magic Numbers
+    def _process_payment(self, pay, amount):
         if amount <= 0:
-            return {"success": False, "message": "Invalid amount"}
-        if amount > 10000:  # PROBLEM: Magic Number
-            return {"success": False, "message": "Amount too high"}
-        if not self._validate_payment_info(payment_info):
-            return {"success": False, "message": "Invalid payment info"}
-        return {"success": True, "transaction_id": f"txn_{random.randint(1000, 9999)}"}
-
-    def _validate_payment_info(self, info):
-        """Validiert Zahlungsinformationen."""
-        if not info:
             return False
-        required = ["card_number", "expiry", "cvv"]
-        for field in required:
-            if field not in info:
+        if pay.get("method") == "card":
+            if len(pay.get("num", "")) != 16:
                 return False
         return True
 
-    def _check_stock(self, product_id, quantity):
-        """Prüft Lagerbestand."""
-        # Simulierte Lagerprüfung
-        return True
-
-    def _save_order(self, order_data, user_id, payment_info, shipping_address):
-        """Speichert Bestellung in der Datenbank."""
-        # Simuliertes Speichern
+    def _save(self, order):
         return random.randint(10000, 99999)
 
-    def _apply_discount(self, order_id, amount):
-        """Wendet Rabatt an."""
-        # Simuliertes Rabatt-Anwenden
+    def _send_email(self, user, oid):
         pass
 
     def doStuff(self, a, b, c, d, e):
-        """
-        PROBLEM: Unklarer Methodenname und zu viele Parameter (> 4)
-        """
-        # PROBLEM: Magic Numbers
         result = a + b * 100 + c - d / 50
         if e:
             result = result * 1.1
         return result
 
-    def temp(self, data):
-        """
-        PROBLEM: Unklarer Methodenname
-        """
-        # PROBLEM: Vermischte Verantwortlichkeiten + Magic Number
-        if len(data) > 50:
-            return data[:50]
-        return data
 
+def format_data(d):
+    return {"id": d["id"], "name": d["name"].title()}
 
-# PROBLEM: Duplikat-Code (gleiche Logik in zwei Funktionen)
-def format_user_data(user):
-    """Formatiert Benutzerdaten."""
-    return {
-        "id": user["id"],
-        "name": user["name"].title(),
-        "email": user["email"].lower()
-    }
-
-
-def prepare_user_data(user):
-    """Bereitet Benutzerdaten vor."""
-    # PROBLEM: Duplikat von format_user_data
-    return {
-        "id": user["id"],
-        "name": user["name"].title(),
-        "email": user["email"].lower()
-    }
+def prepare_data(d):
+    return {"id": d["id"], "name": d["name"].title()}
