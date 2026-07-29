@@ -61,13 +61,14 @@ def display_diff_with_bat(diff_text):
         )
         stdout, stderr = process.communicate(input=diff_text, timeout=5)
         if process.returncode == 0:
+            # Gib die farbige Ausgabe aus (enthält bereits Newlines)
             print(stdout, end='')
         else:
             # Falls bat fehlschlägt, normale Ausgabe
-            print(diff_text, end='')
+            print(diff_text)
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         # bat nicht verfügbar oder Fehler
-        print(diff_text, end='')
+        print(diff_text)
 
 
 def read_code(file_path):
@@ -223,14 +224,22 @@ def show_diff(original, modified, smell):
             lineterm="",
             n=0
         )
-        # Generiere den Diff als String
+        # Generiere den Diff als String mit Zeilenumbrüchen
         diff_lines = []
         for line in diff:
-            if line.startswith('+++') or line.startswith('---'):
-                continue
-            diff_lines.append(line)
+            # Behalte --- und +++ Zeilen für korrekten unified diff
+            # Entferne nur die Dateinamen
+            if line.startswith('--- ') or line.startswith('+++ '):
+                # Ersetze Dateinamen mit generischen Namen
+                if line.startswith('--- '):
+                    diff_lines.append('--- original')
+                else:
+                    diff_lines.append('+++ modified')
+            else:
+                # EntferneExisting newlines und füge sie später manuell hinzu
+                diff_lines.append(line.rstrip('\n'))
         
-        diff_text = ''.join(diff_lines)
+        diff_text = '\n'.join(diff_lines)
         
         # Verwende bat für farbige Ausgabe, falls verfügbar
         if has_bat():
@@ -239,13 +248,13 @@ def show_diff(original, modified, smell):
             # Manuelle Farbausgabe mit ANSI-Codes
             for line in diff_lines:
                 if line.startswith('@@'):
-                    print(f" {line}", end='')
+                    print(f" {line}")
                 elif line.startswith('+') and not line.startswith('++'):
-                    print(f"\033[32m{line}\033[0m", end='')
+                    print(f"\033[32m{line}\033[0m")
                 elif line.startswith('-') and not line.startswith('--'):
-                    print(f"\033[31m{line}\033[0m", end='')
+                    print(f"\033[31m{line}\033[0m")
                 else:
-                    print(f" {line}", end='')
+                    print(f" {line}")
         print("-" * 70)
 
 
