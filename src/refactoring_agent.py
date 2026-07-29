@@ -186,6 +186,25 @@ def show_diff(original, modified, smell):
         print("\nAktueller Code:")
         print("-" * 70)
         
+        # Finde den ersten nicht-leeren, nicht-Kommentar Block im Bereich
+        # um nur den relevanten Code anzuzeigen
+        code_start = None
+        code_end = None
+        
+        for i in range(start_line, end_line + 1):
+            if i < len(lines):
+                stripped = lines[i].strip()
+                # Überspringe leere Zeilen und Kommentare
+                if stripped and not stripped.startswith('#') and not stripped.startswith('"""') and not stripped.startswith("'''"):
+                    if code_start is None:
+                        code_start = i
+                    code_end = i
+        
+        # Falls wir Code gefunden haben, zeige nur diesen Block
+        if code_start is not None:
+            start_line = code_start
+            end_line = code_end
+        
         # Zeige nur die Zeilen im Bereich start_line bis end_line
         current_code = []
         for i in range(start_line, end_line + 1):
