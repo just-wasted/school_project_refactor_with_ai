@@ -21,7 +21,10 @@ from refactoring_agent import (
     apply_interactive,
     apply_all,
     show_diff,
-    main
+    main,
+    create_backup,
+    verify_syntax,
+    BACKUP_DIR
 )
 
 
@@ -238,6 +241,64 @@ def test_main_json_with_file(mock_check_model, mock_check_ollama, mock_post, tmp
 
 
 # =============================================================================
+# TEST: New functions (create_backup, verify_syntax)
+# =============================================================================
+
+
+def test_create_backup_creates_directory(tmp_path):
+    """Test that create_backup creates the backup directory."""
+    # Create test file
+    test_file = tmp_path / "test.py"
+    test_file.write_text("def foo(): pass")
+    
+    # Call create_backup
+    backup_path = create_backup(str(test_file))
+    
+    # Check that backup directory exists
+    expected_dir = tmp_path / BACKUP_DIR
+    assert expected_dir.exists()
+    
+    # Check that backup file exists
+    assert os.path.exists(backup_path)
+    
+    # Check that backup is read-only
+    # Note: On some systems we can't check this reliably in tests
+    
+    # Check that backup content matches original
+    with open(backup_path, 'r') as f:
+        assert f.read() == "def foo(): pass"
+
+
+def test_create_backup_multiple_calls(tmp_path):
+    """Test that multiple calls to create_backup create unique files."""
+    test_file = tmp_path / "test.py"
+    test_file.write_text("def foo(): pass")
+    
+    backup1 = create_backup(str(test_file))
+    backup2 = create_backup(str(test_file))
+    
+    assert backup1 != backup2
+    assert os.path.exists(backup1)
+    assert os.path.exists(backup2)
+
+
+def test_verify_syntax_valid_code():
+    """Test verify_syntax with valid Python code."""
+    valid_code = "def foo():\n    return 42"
+    is_valid, error = verify_syntax(valid_code)
+    assert is_valid is True
+    assert error == ""
+
+
+def test_verify_syntax_invalid_code():
+    """Test verify_syntax with invalid Python code."""
+    invalid_code = "def foo()  # Missing colon\n    return 42"
+    is_valid, error = verify_syntax(invalid_code)
+    assert is_valid is False
+    assert error != ""
+
+
+# =============================================================================
 # Integration Test: Full workflow with mocks
 # =============================================================================
 
@@ -334,9 +395,39 @@ def test_apply_smell_valid_location():
         "description": "Test description",
         "suggestion": "```python\ndef foo():\n    return 42\n```"
     }
-    result = apply_smell(code, smell)
+    result = apply_smell(code, smell, verify=False)
     assert "return 42" in result
     assert "def foo():" in result
+
+
+def test_apply_smell_with_indentation():
+    """Test apply_smell preserves indentation when inserting into class."""
+    code = "class Test:\n    def method(self):\n        pass"
+    smell = {
+        "type": "test",
+        "location": {"start_line": 2, "end_line": 2},
+        "description": "Add new method",
+        "suggestion": "```python\n    def new_method(self):\n        return 42\n```"
+    }
+    result = apply_smell(code, smell, verify=False)
+    # Should preserve the class indentation
+    assert "    def new_method(self):" in result
+    assert "        return 42" in result
+
+
+def test_apply_smell_syntax_verification():
+    """Test apply_smell with syntax verification."""
+    code = "def foo():\n    pass"
+    # Invalid code (missing colon)
+    smell = {
+        "type": "test",
+        "location": {"start_line": 1, "end_line": 1},
+        "description": "Invalid code",
+        "suggestion": "```python\ndef foo()  # Missing colon\n    return 42\n```"
+    }
+    # With verification, should return original code
+    result = apply_smell(code, smell, verify=True)
+    assert result == code
 
 
 def test_apply_smell_without_code_block():
@@ -348,7 +439,7 @@ def test_apply_smell_without_code_block():
         "description": "Test description",
         "suggestion": "Test suggestion"
     }
-    result = apply_smell(code, smell)
+    result = apply_smell(code, smell, verify=False)
     # Ohne Code-Block wird der suggestion-Text direkt als Ersatz verwendet
     assert "Test suggestion" in result
     # Der ursprüngliche Code sollte ersetzt worden sein
@@ -364,7 +455,7 @@ def test_apply_smell_invalid_location():
         "description": "Test description",
         "suggestion": "Test suggestion"
     }
-    result = apply_smell(code, smell)
+    result = apply_smell(code, smell, verify=False)
     # Bei ungültiger Location wird der suggestion-Text am Ende angehängt
     assert "Test suggestion" in result
     assert "def foo():" in result
