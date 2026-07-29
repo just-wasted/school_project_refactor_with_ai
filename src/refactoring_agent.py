@@ -105,8 +105,22 @@ def extract_smells(response):
         return []
 
 
+def extract_code_blocks(text):
+    """Extrahiere Code-Blöcke aus Text (z. B. aus KI-Vorschlägen)."""
+    import re
+    # Finde Code in ```...``` Blöcken (auch mit Language-Specifier wie ```python)
+    code_blocks = re.findall(r'```(?:\w*\n)?(.*?)```', text, re.DOTALL)
+    if code_blocks:
+        return [block.strip() for block in code_blocks]
+    return []
+
+
 def show_diff(original, modified, smell):
     """Zeige den Diff zwischen Original und modifiziertem Code."""
+    lines = original.split('\n')
+    start_line = smell.get('location', {}).get('start_line', 1) - 1
+    end_line = smell.get('location', {}).get('end_line', 1) - 1
+    
     print("\n" + "=" * 70)
     print(f"VORSCHLAG: {smell.get('type', 'unknown')}")
     print(f"Beschreibung: {smell.get('description', '')}")
@@ -115,32 +129,68 @@ def show_diff(original, modified, smell):
     print(f"Begründung: {smell.get('reason', '')}")
     print("=" * 70)
     
+    # Zeige den betroffenen Code-Bereich (nur den relevanten Teil)
+    if start_line >= 0 and end_line < len(lines):
+        print("\nAktueller Code:")
+        print("-" * 70)
+        # Finde den ersten nicht-leeren/kommentar Zeile im Bereich
+        actual_start = start_line
+        while actual_start <= end_line and (not lines[actual_start].strip() or lines[actual_start].strip().startswith('#')):
+            actual_start += 1
+        if actual_start <= end_line:
+            start_line = actual_start
+        
+        # Zeige den Code mit relativen Zeilennummern
+        for i in range(start_line, end_line + 1):
+            if lines[i].strip():  # Nur nicht-leere Zeilen
+                marker = ">>> " if start_line <= i <= end_line else "    "
+                # Relativ zur Methode
+                rel_line = i - start_line + 1
+                print(f"{marker}{rel_line:4d}: {lines[i]}")
+        print("-" * 70)
+    
+    # Zeige die Vorschläge
     suggestion = smell.get('suggestion', '')
     if suggestion:
         print("\nVorgeschlagene Lösung:")
         print("-" * 70)
-        print(suggestion)
+        
+        # Versuche Code-Blöcke zu extrahieren
+        code_blocks = extract_code_blocks(suggestion)
+        if code_blocks:
+            for i, block in enumerate(code_blocks, 1):
+                print(f"Code-Beispiel {i}:")
+                for line in block.strip().split('\n'):
+                    if line.strip():
+                        print(f"    {line}")
+                print()
+        else:
+            # Kein Code-Beispiel, nur Beschreibung
+            print(f"Hinweis: {suggestion}")
         print("-" * 70)
     
-    print("\nÄnderungen (Diff):")
-    print("-" * 70)
-    diff = difflib.unified_diff(
-        original.splitlines(keepends=True),
-        modified.splitlines(keepends=True),
-        fromfile="original",
-        tofile="modified",
-        lineterm=""
-    )
-    for line in diff:
-        if line.startswith('+++') or line.startswith('---'):
-            continue
-        if line.startswith('+'):
-            print(f"{line.rstrip()}", end='')
-        elif line.startswith('-'):
-            print(f"{line.rstrip()}", end='')
-        else:
-            print(f" {line.rstrip()}", end='')
-    print("-" * 70)
+    # Zeige was tatsächlich geändert wird (Kommentare)
+    if modified != original:
+        print("\nÄnderungen (Kommentare werden eingefügt):")
+        print("-" * 70)
+        diff = difflib.unified_diff(
+            original.splitlines(keepends=True),
+            modified.splitlines(keepends=True),
+            fromfile="original",
+            tofile="modified",
+            lineterm="",
+            n=3
+        )
+        for line in diff:
+            if line.startswith('+++') or line.startswith('---'):
+                continue
+            if line.startswith('+') and not line.startswith('++'):
+                print(f"+{line[1:]}", end='')
+            elif line.startswith('-') and not line.startswith('--'):
+                print(f"-{line[1:]}", end='')
+            else:
+                print(f" {line}", end='')
+        print("-" * 70)
 
 
 def apply_smell(code, smell):
