@@ -107,6 +107,23 @@ def extract_smells(response):
 
 def show_diff(original, modified, smell):
     """Zeige den Diff zwischen Original und modifiziertem Code."""
+    print("\n" + "=" * 70)
+    print(f"VORSCHLAG: {smell.get('type', 'unknown')}")
+    print(f"Beschreibung: {smell.get('description', '')}")
+    print(f"Zeile: {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}")
+    print(f"Auswirkung: {smell.get('impact', 'unknown')}")
+    print(f"Begründung: {smell.get('reason', '')}")
+    print("=" * 70)
+    
+    suggestion = smell.get('suggestion', '')
+    if suggestion:
+        print("\nVorgeschlagene Lösung:")
+        print("-" * 70)
+        print(suggestion)
+        print("-" * 70)
+    
+    print("\nÄnderungen (Diff):")
+    print("-" * 70)
     diff = difflib.unified_diff(
         original.splitlines(keepends=True),
         modified.splitlines(keepends=True),
@@ -114,18 +131,16 @@ def show_diff(original, modified, smell):
         tofile="modified",
         lineterm=""
     )
-    print("\n" + "=" * 60)
-    print(f"VORSCHLAG: {smell.get('type', 'unknown')}")
-    print(f"Beschreibung: {smell.get('description', '')}")
-    print(f"Zeile: {smell.get('location', {}).get('start_line', '?')}-{smell.get('location', {}).get('end_line', '?')}")
-    print("=" * 60)
-    print("Diff:")
-    print("-" * 60)
     for line in diff:
         if line.startswith('+++') or line.startswith('---'):
             continue
-        print(line, end='')
-    print("-" * 60)
+        if line.startswith('+'):
+            print(f"{line.rstrip()}", end='')
+        elif line.startswith('-'):
+            print(f"{line.rstrip()}", end='')
+        else:
+            print(f" {line.rstrip()}", end='')
+    print("-" * 70)
 
 
 def apply_smell(code, smell):
@@ -157,14 +172,12 @@ def apply_interactive(code, smells, output_file=None):
         show_diff(modified_code, proposed_code, smell)
         
         while True:
-            response = input("Anwenden? (j/n/s für überspringen/alles/abbruch): ").strip().lower()
+            response = input("Anwenden? (j=ja, n=nein, u=überspringen, a=alle, q=abbruch): ").strip().lower()
             if response in ('j', 'y', 'yes', ''):
                 modified_code = proposed_code
                 applied_count += 1
                 break
-            elif response in ('n', 'no'):
-                break
-            elif response in ('s', 'skip'):
+            elif response in ('n', 'no', 'u', 'skip'):
                 break
             elif response in ('a', 'all'):
                 modified_code = proposed_code
@@ -177,7 +190,7 @@ def apply_interactive(code, smells, output_file=None):
                 print("Abbruch.")
                 return None
             else:
-                print("Ungültige Eingabe. Bitte j/n/s/a eingeben.")
+                print("Ungültige Eingabe. Bitte j/n/u/a/q eingeben.")
     
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as f:
