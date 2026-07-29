@@ -76,9 +76,9 @@ def check_model(m):
 
 
 def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
-    nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
     if mode == "analyze":
-        p = f"Analyze the code with line numbers. Return old_code, new_code, diff.\n\n```\n{nc}\n```"
+        nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
+        p = f"Here is the COMPLETE Python file with line numbers:\n\n```\n{nc}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
         system = SYSTEM_PROMPT_ANALYZE
         use_json_format = True
     else:
