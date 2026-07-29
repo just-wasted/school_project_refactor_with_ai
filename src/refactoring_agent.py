@@ -159,7 +159,9 @@ def call_ollama(code, model, temperature, error_context=None):
     prompt = f"Analysiere den folgenden Code MIT ZEILENNUMMERN. Verwende DIESE NUMMERN für start_line und end_line.\n\n```\n{numbered_code}\n```"
     
     if error_context:
-        prompt += f"\n\nFEHLER KONTEXT: {error_context}\nKorrigiere deine Vorschläge basierend auf diesem Fehler."
+        # Extrahiere nur den relevanten Fehlertext, entferne Dateipfade und technische Details
+        clean_error = error_context.split('syntax_check_')[0].split('Finaler Code hat Syntax-Fehler:')[-1].strip()
+        prompt += f"\n\nFEHLERHINWEIS: {clean_error}\nBitte korrigiere deine Code-Vorschläge so, dass sie syntaktisch gültigen Python-Code erzeugen."
     
     payload = {
         "model": model,
@@ -167,7 +169,7 @@ def call_ollama(code, model, temperature, error_context=None):
         "prompt": prompt,
         "stream": False,
         "format": "json",
-        "options": {"temperature": temperature, "top_p": 0.9}
+        "options": {"temperature": temperature, "top_p": 0.9, "num_ctx": 32768}
     }
     try:
         response = requests.post(
@@ -396,9 +398,11 @@ def apply_smell(code, smell):
     
     # Hole den tatsächlichen Code aus dem suggestion
     if code_blocks:
-        refactored_code = code_blocks[0]
+        refactored_code = code_blocks[0].strip()
     else:
-        refactored_code = suggestion
+        # Falls kein Code-Block gefunden wurde, überspringe diesen Vorschlag
+        # (vermutlich ist es nur eine Beschreibung ohne Code)
+        return code
     
     # Einfacher Ersatz ohne Einrückungskorrektur - das Modell muss es richtig machen
     # Fall 1: Einfügung (start_line == end_line)
