@@ -86,13 +86,15 @@ def check_model(m):
 def call_ollama(code, model, temp, mode="analyze", apply_instructions="", smell_type=None):
     nctx = 131072 if "gemma4" in model else 32768
     n_predict = 16384 if "gemma4" in model else 8192
+    if smell_type == "Long Method":
+        n_predict = 32768 if "gemma4" in model else 16384
     if mode == "analyze":
         p = f"Here is the COMPLETE Python file:\n\n```\n{code}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
         system = SYSTEM_PROMPT_ANALYZE.get(smell_type, SYSTEM_PROMPT_ANALYZE.get(SMELL_TYPES[0], "")) if smell_type else ""
         if not system:
             system = "You are a senior Python code refactoring specialist. Find code smells and return them in JSON."
         payload = {"model": model, "system": system, "prompt": p, "stream": False,
-                  "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}, "format": "json"}
+                  "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}}
     else:
         p = f"{apply_instructions}\n\nComplete file code:\n{code}\nApply all selected refactorings."
         system = SYSTEM_PROMPT_APPLY
@@ -145,6 +147,10 @@ def extract_smells(resp, full_code=""):
     try:
         rt = resp.get("response", "{}")
         if rt.strip():
+            # Remove markdown code blocks (```json ... ```)
+            import re
+            rt = re.sub(r'```(?:json|python|Python)?', '', rt).strip()
+            rt = re.sub(r'```', '', rt).strip()
             try:
                 parsed = json.loads(rt)
             except:

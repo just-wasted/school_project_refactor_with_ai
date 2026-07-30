@@ -1,31 +1,38 @@
 """Order processing module."""
 
+
 class OrderProcessor:
     def process(self, order, user, payment):
-        if not order:
+        if order is None:
             return None
-        if not user:
+        if not isinstance(order, dict):
             return None
-        if not payment:
+        if "id" not in order:
             return None
-        validated = self._validate(order)
-        if not validated:
+        if order["id"] <= 0:
             return None
-        processed = self._handle(payment)
-        if not processed:
+        if "items" not in order:
             return None
-        result = self._store(order)
-        self._notify(user)
+        if len(order["items"]) == 0:
+            return None
+        total_items = sum(item.get("quantity", 0) for item in order["items"])
+        if total_items <= 0:
+            return None
+        if user is None:
+            return None
+        if not isinstance(user, dict):
+            return None
+        if "email" not in user:
+            return None
+        if payment is None:
+            return None
+        if not isinstance(payment, dict):
+            return None
+        if "amount" not in payment:
+            return None
+        if payment["amount"] <= 0:
+            return None
+        if payment["amount"] < total_items:
+            return None
+        result = order.get("id")
         return result
-
-    def _validate(self, order):
-        return order.get("id") > 0
-
-    def _handle(self, payment):
-        return payment.get("amount", 0) > 0
-
-    def _store(self, order):
-        return order.get("id")
-
-    def _notify(self, user):
-        pass

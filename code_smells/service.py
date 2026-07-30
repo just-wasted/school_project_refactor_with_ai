@@ -12,55 +12,35 @@ class ServiceHandler:
         self.cfg = cfg
 
     def handle_request(self, data, identifier, payment_info, delivery):
-        if data is None or identifier < 0:
-            return {"status": "error", "message": "Invalid"}
-        entity = self._fetch_entity(identifier)
-        if not self.check_validity(data):
-            return {"status": "error", "message": "Bad data"}
-        if not self.ensure_quality(data):
-            return {"status": "error", "message": "Bad input"}
-        if not self._handle_payment(payment_info, data["amount"]):
-            return {"status": "error", "message": "Payment failed"}
-        record_id = self._store(data)
-        self._notify(entity, record_id)
-        return {"status": "success", "record_id": record_id}
-
-    def check_validity(self, content):
-        if content is None:
-            return False
-        if "entries" not in content:
-            return False
-        for entry in content["entries"]:
+        if data is None:
+            return {"status": "error", "message": "Invalid input data"}
+        if not isinstance(data, dict):
+            return {"status": "error", "message": "Data must be a dictionary"}
+        if "entries" not in data:
+            return {"status": "error", "message": "Data validation failed"}
+        for entry in data["entries"]:
             if entry.get("count", 0) <= 0:
-                return False
-        return True
-
-    def ensure_quality(self, content):
-        if content is None:
-            return False
-        if "entries" not in content:
-            return False
-        for entry in content["entries"]:
-            if entry.get("count", 0) < 1:
-                return False
-        return True
-
-    def _fetch_entity(self, id):
-        return {"id": id, "contact": "user@example.com"}
-
-    def _handle_payment(self, pay, total):
-        if total <= 0:
-            return False
-        if pay.get("mode") == "card":
-            if len(pay.get("number", "")) != 16:
-                return False
-        return True
-
-    def _store(self, content):
-        return random.randint(10000, 99999)
-
-    def _notify(self, entity, id):
-        pass
+                return {"status": "error", "message": "Data validation failed"}
+        if identifier is None:
+            return {"status": "error", "message": "Invalid identifier"}
+        if not isinstance(identifier, int):
+            return {"status": "error", "message": "Identifier must be an integer"}
+        if identifier < 0:
+            return {"status": "error", "message": "Invalid identifier"}
+        entity = {"id": identifier, "contact": "user@example.com"}
+        if payment_info is None:
+            return {"status": "error", "message": "Payment information missing"}
+        if not isinstance(payment_info, dict):
+            return {"status": "error", "message": "Payment must be a dictionary"}
+        if payment_info.get("amount", 0) <= 0:
+            return {"status": "error", "message": "Payment processing failed"}
+        if payment_info.get("mode") == "card":
+            if len(payment_info.get("number", "")) != 16:
+                return {"status": "error", "message": "Payment processing failed"}
+        record_id = random.randint(10000, 99999)
+        if delivery is not None:
+            pass
+        return {"status": "success", "record_id": record_id}
 
     def compute(self, base, factor, adjustment, deduction, apply_bonus):
         result = base + factor * 100 + adjustment - deduction / 50
