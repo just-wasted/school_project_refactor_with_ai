@@ -4,10 +4,8 @@ ABSOLUTE RULE (NON-NEGOTIABLE):
 Any refactoring MUST produce 100% identical behavior, including return values, error messages, side effects, and all input validation checks as the original method.
 
 SMELL DETECTION:
-Flag any method as Long Method if it has Cyclomatic Complexity greater than 5 OR exceeds 15 lines of executable code OR contains more than 3 distinct functional blocks.
-For Cyclomatic Complexity: count decision points (if, for, while, and, or, try, except, ternary operators) plus 1. Each boolean operator (and/or) in conditions adds 1.
-For line counting: count every line with a statement, assignment, control flow keyword, or function call. Multi-line constructs count as one line per logical line. Exclude blank lines and comments.
-Functional blocks include: input validation, business calculations, object creation, error handling, result assembly.
+Count the number of control flow statements in each method: if, elif, else, for, while, try, except, ternary operators. Each and/or in a condition counts as one additional statement.
+Flag any method as Long Method if the total count exceeds 10.
 
 EXTRACTION SCOPE:
 DO EXTRACT: pure calculations, data transformations, complex entity creation.
