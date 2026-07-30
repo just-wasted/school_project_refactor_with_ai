@@ -55,7 +55,6 @@ class Processor:
     "location": {"start_line": <int>, "end_line": <int>},
     "old_code": "<complete method>",
     "new_code": "<complete class with ALL helpers>",
-    "diff": "<unified diff>",
     "reason": "<short>",
     "impact": "maintainability"
   }]
