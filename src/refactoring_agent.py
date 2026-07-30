@@ -89,7 +89,7 @@ def call_ollama(code, model, temp, mode="analyze", apply_instructions="", smell_
     if smell_type == "Long Method":
         n_predict = 32768 if "gemma4" in model else 16384
     if mode == "analyze":
-        p = f"Here is the COMPLETE Python file:\n\n```\n{code}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
+        p = f"Here is the COMPLETE Python file:\n\n```\n{code}\n```\n\nAnalyze and return code smells with old_code and new_code."
         system = SYSTEM_PROMPT_ANALYZE.get(smell_type, SYSTEM_PROMPT_ANALYZE.get(SMELL_TYPES[0], "")) if smell_type else ""
         if not system:
             system = "You are a senior Python code refactoring specialist. Find code smells and return them in JSON."
