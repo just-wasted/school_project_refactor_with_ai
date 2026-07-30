@@ -354,6 +354,9 @@ subprocess.Popen(["bat", ...])
 | CRITICAL | JSON Parsing Fragile | extract_smells | Smells lost | Open |
 | CRITICAL | fix_truncated_json Incomplete | fix_truncated_json | JSON truncation fails | Open |
 | CRITICAL | Response Format Inconsistent | call_ollama | Parsing problems | Open |
+| CRITICAL | Helper Methods Outside Class | Model Output | Syntax errors | Open |
+| CRITICAL | Inconsistent Indentation | Model Output | Syntax errors | Open |
+| CRITICAL | Unnecessary Logic Addition | Model Output | Behavior change | Open |
 | HIGH | old_code Extraction Overrides | extract_smells | Wrong code | Open |
 | HIGH | Unnecessary JSON Parsing | apply_refactoring | Complexity | Open |
 | HIGH | Indentation Assumptions | fix_indentation | Syntax errors | Open |
@@ -363,6 +366,7 @@ subprocess.Popen(["bat", ...])
 | LOW | Temporary File Leak | verify_syntax | Resource leak | Open |
 | LOW | External bat Dependency | display_with_bat | Portability | Open |
 | LOW | Redundant API Calls | check_ollama/check_model | Performance | Open |
+| LOW | Type Hints Added | Model Output | Style inconsistency | Open |
 
 ---
 
@@ -384,6 +388,137 @@ subprocess.Popen(["bat", ...])
 9. **Fix resource leaks** - Use with statements
 10. **Remove external dependencies** - Fallback for bat
 11. **Optimize API calls** - Cache model list
+
+---
+
+## Model Output Issues
+
+### 13. Long Method Refactoring - Helper Methods Outside Class
+**Location:** system_prompt_analyze_long_method.md / Model Output
+
+**Problem:**
+- When extracting logic into helper methods, the model places helper methods OUTSIDE the class definition instead of inside it
+- Helper methods use `self` parameter but are defined as standalone functions
+- Causes syntax errors and invalid Python code
+
+**Example from output:**
+```python
+def _get_tier_factor(self, tier: str) -> float:
+        if tier == "standard":
+            return 0.0
+    
+    def _calculate_base_value(self, data: dict) -> float:
+        entries = data.get("entries", [])
+        ...
+```
+Both methods are outside the class, making them invalid.
+
+**Impact:**
+- Generated refactored code has syntax errors
+- Helper methods cannot access instance variables
+- Code cannot be executed
+
+**Recommended Fix:**
+- Add explicit instruction in system prompt: "Helper methods MUST be defined INSIDE the class, at the same indentation level as other methods"
+- Add validation in apply_refactoring to check class structure
+
+**Priority:**  **CRITICAL**
+
+---
+
+### 14. Long Method Refactoring - Inconsistent Indentation
+**Location:** system_prompt_analyze_long_method.md / Model Output
+
+**Problem:**
+- Helper methods have inconsistent indentation (some at class level, some with extra spaces)
+- Mix of tabs and spaces possible
+- Method definitions not aligned with class structure
+
+**Example from output:**
+```python
+def _get_tier_factor(self, tier: str) -> float:
+        if tier == "standard":
+            return 0.0
+    
+    def _calculate_base_value(self, data: dict) -> float:
+        ...
+```
+
+**Impact:**
+- Syntax errors in generated code
+- fix_indentation function may not handle all cases
+- Code formatting issues
+
+**Recommended Fix:**
+- Add explicit indentation rules in system prompt
+- Normalize indentation in fix_indentation function
+- Validate indentation before returning code
+
+**Priority:**  **CRITICAL**
+
+---
+
+### 15. Long Method Refactoring - Unnecessary Logic Addition
+**Location:** system_prompt_analyze_long_method.md / Model Output
+
+**Problem:**
+- Model adds extra logic not present in original code
+- Example: `_calculate_base_value` adds `if not entries: return 0.0` check
+- Original code: `sum(... for entry in d["entries"])` returns 0.0 for empty list naturally
+
+**Example from output:**
+```python
+def _calculate_base_value(self, data: dict) -> float:
+    entries = data.get("entries", [])
+    if not entries:  # <- ADDED LOGIC NOT IN ORIGINAL
+        return 0.0
+    v1 = sum(entry.get("count", 0) * entry.get("price", 0) for entry in entries)
+    return v1
+```
+
+**Impact:**
+- Violation of ABSOLUTE RULE: "100% identical behavior"
+- Changes code semantics
+- Introduces potential bugs
+
+**Recommended Fix:**
+- Emphasize in system prompt: "NEVER add, remove, or modify any logic. Only extract existing code into helper methods."
+- Add behavior preservation validation
+- Compare original and refactored code semantics
+
+**Priority:**  **CRITICAL**
+
+---
+
+### 16. Long Method Refactoring - Type Hints in Extracted Code
+**Location:** system_prompt_analyze_long_method.md / Model Output
+
+**Problem:**
+- Model adds type hints to extracted helper methods that were not in original code
+- Example: `def _get_tier_factor(self, tier: str) -> float:`
+- Original method had no type hints
+
+**Impact:**
+- While type hints improve code quality, they change the code style
+- May not be desired in all codebases
+- Violates "preserve exact behavior" if style consistency is required
+
+**Recommended Fix:**
+- Add option to preserve/drop type hints
+- Or: Instruct model to match original code style (with or without type hints)
+
+**Priority:**  **LOW**
+
+---
+
+## Model Output Issues Summary
+
+| Priority | Issue | Location | Impact | Status |
+|----------|-------|----------|--------|--------|
+| CRITICAL | Helper Methods Outside Class | Model Output | Syntax errors | Open |
+| CRITICAL | Inconsistent Indentation | Model Output | Syntax errors | Open |
+| CRITICAL | Unnecessary Logic Addition | Model Output | Behavior change | Open |
+| LOW | Type Hints Added | Model Output | Style inconsistency | Open |
 
 ---
 
