@@ -55,3 +55,4 @@ Emojis are explicitly unwanted in the entire project. This includes:
 - Short, clear prompts with specific examples work better than long, generic ones
 - Separate analysis and application phases with dedicated prompts
 - Test prompts with multiple runs - models are not 100% deterministic
+- **Avoid markdown formatting (##, **, ***) in prompts for gemma4** - it confuses the model's constraint interpretation. Use plain text for STRICT RULE, ABSOLUTE RULE, and other critical constraints to ensure they are followed correctly.
