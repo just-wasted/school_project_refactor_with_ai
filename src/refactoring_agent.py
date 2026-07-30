@@ -248,16 +248,29 @@ def apply_refactoring(code, smells, sel, model, temp):
     if not sel:
         return code
     ss = [smells[x] for x in sel]
-    inst = "YOU ARE APPLYING SELECTED REFACTORINGS. YOUR ABSOLUTE PRIORITY IS: EXTERNAL BEHAVIOR MUST NEVER CHANGE.\n"
-    inst += "RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO EXPLANATIONS.\n"
-    inst += "Remove old methods that are replaced by new helper methods.\n\nSelected refactorings to apply:\n"
+    inst = "YOU ARE APPLYING SELECTED REFACTORINGS TO THE COMPLETE FILE BELOW.\n"
+    inst += "YOUR ABSOLUTE PRIORITIES: (1) EXTERNAL BEHAVIOR MUST BE 100% IDENTICAL, (2) DELETE ALL OLD CODE THAT IS REPLACED.\n"
+    inst += "RETURN ONLY THE COMPLETE PYTHON FILE CODE. NO JSON. NO MARKDOWN. NO EXPLANATIONS. NO COMMENTS.\n\n"
+    
+    inst += "REFACTORINGS TO APPLY:\n"
     for i, s in enumerate(ss, 1):
         loc = s.get("location", {})
-        inst += f"{i}. Type: {s.get('type', 'unknown')}\nLines: {loc.get('start_line', '?')}-{loc.get('end_line', '?')}\n"
-        inst += f"Old code:\n{s.get('old_code', '')}\nNew code:\n{s.get('new_code', '')}\n\n"
-    inst += "CRITICAL RULES:\n- Apply ALL selected changes atomically\n- REMOVE old methods that are replaced\n"
-    inst += "- NEVER change behavior not explicitly in selected refactorings\n- Preserve ALL validation, error messages, return values\n"
-    inst += "- RETURN ONLY THE COMPLETE PYTHON CODE. NO JSON. NO MARKDOWN. NO OTHER TEXT.\n"
+        old_code = s.get('old_code', '').strip()
+        new_code = s.get('new_code', '').strip()
+        inst += f"--- Refactoring {i}: {s.get('type', 'unknown')} (Lines {loc.get('start_line', '?')}-{loc.get('end_line', '?')}) ---\n"
+        inst += f"OLD CODE TO REMOVE:\n{old_code}\n\n"
+        inst += f"NEW CODE TO INSERT:\n{new_code}\n\n"
+    
+    inst += "\nCRITICAL INSTRUCTIONS:\n"
+    inst += "- DELETE all old_code blocks EXACTLY as shown above\n"
+    inst += "- INSERT all new_code blocks EXACTLY as shown above\n"
+    inst += "- If new_code contains helper methods: insert at appropriate location, DELETE replaced old methods\n"
+    inst += "- UPDATE ALL call sites throughout the entire file to use new method/parameter names\n"
+    inst += "- PRESERVE: exact behavior, validation, error messages, return values, side effects\n"
+    inst += "- NEVER leave old code commented out or in place\n"
+    inst += "- File MUST be valid Python - check before returning\n"
+    inst += "- RETURN ONLY THE CODE - nothing else\n\n"
+    
     result = call_ollama(code, model, temp, mode="apply", apply_instructions=inst)
     rt = result.get("response", "")
     for m in ['```python', '```Python', '```']:
