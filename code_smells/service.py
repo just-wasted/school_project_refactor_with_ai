@@ -29,17 +29,14 @@ class ServiceHandler:
         else:
             v4 = 0.20
         v5 = v1 * (1 - v4)
-        v6 = d.get("tax_exempt", False)
-        v7 = 0.0 if v6 else v5 * 0.19
-        v8 = v5 + v7
-        if v8 < 0:
-            v8 = 0.0
-        obj = {"id": e, "name": d.get("user_name", "unknown"), "status": "processed"}
-        if f is not None and f.get("amount", 0) < v8:
+        if v5 < 0:
+            v5 = 0.0
+        if v5 > 10000:
+            v5 = 10000.0
+        obj = {"id": e, "name": d.get("user_name", "unknown")}
+        if f is not None and f.get("amount", 0) < v5:
             return {"status": "error", "message": "Payment verification failed"}
-        obj2 = {"entity_id": obj["id"], "total": v8}
-        rid = random.randint(10000, 99999)
-        return {"status": "success", "record_id": rid, "entity": obj, "total": v8, "audit": obj2}
+        return {"status": "success", "record_id": random.randint(10000, 99999), "entity": obj, "total": v5}
 
     def compute(self, p1, p2, p3, p4, p5):
         res = p1 + p2 * 100 + p3 - p4 / 50
