@@ -27,7 +27,8 @@ class ServiceHandler:
             return {"status": "error", "message": "Identifier must be an integer"}
         if identifier < 0:
             return {"status": "error", "message": "Invalid identifier"}
-        entity = {"id": identifier, "contact": "user@example.com"}
+        entity = self._build_entity(identifier, data.get("user_name", "unknown"))
+        total_amount = self._calculate_entries_total(data["entries"])
         if payment_info is None:
             return {"status": "error", "message": "Payment information missing"}
         if not isinstance(payment_info, dict):
@@ -37,10 +38,32 @@ class ServiceHandler:
         if payment_info.get("mode") == "card":
             if len(payment_info.get("number", "")) != 16:
                 return {"status": "error", "message": "Payment processing failed"}
-        record_id = random.randint(10000, 99999)
+        processed_entity = self._enrich_entity(entity, data.get("metadata", {}))
+        record_id = self._generate_record_id()
         if delivery is not None:
-            pass
-        return {"status": "success", "record_id": record_id}
+            delivery_status = self._process_delivery(delivery, processed_entity)
+        else:
+            delivery_status = "none"
+        return {"status": "success", "record_id": record_id, "entity": processed_entity,
+                "total": total_amount, "delivery": delivery_status}
+
+    def _build_entity(self, identifier, user_name):
+        return {"id": identifier, "name": user_name, "contact": "user@example.com", "created_at": "2024-01-01"}
+
+    def _calculate_entries_total(self, entries):
+        return sum(entry.get("count", 0) * entry.get("price", 0) for entry in entries)
+
+    def _enrich_entity(self, entity, metadata):
+        enriched = entity.copy()
+        enriched.update(metadata)
+        enriched["processed"] = True
+        return enriched
+
+    def _process_delivery(self, delivery, entity):
+        return f"{delivery['method']}_{entity['id']}"
+
+    def _generate_record_id(self):
+        return random.randint(10000, 99999)
 
     def compute(self, base, factor, adjustment, deduction, apply_bonus):
         result = base + factor * 100 + adjustment - deduction / 50
