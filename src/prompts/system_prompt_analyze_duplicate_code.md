@@ -20,24 +20,24 @@ Flag if you find 2 or more code blocks (3+ lines each) that have the same struct
 
 Example:
 ```python
-def clean_name(self, name):
-    if not name:
-        return ""
-    name = name.strip()
-    name = name.replace("  ", " ")
-    return name
+def normalize_score(raw):
+    if raw < 0:
+        return 0
+    if raw > 100:
+        return 100
+    return raw
 
-def clean_address(self, address):
-    if not address:
-        return ""
-    address = address.strip()
-    address = address.replace("  ", " ")
-    return address
+def normalize_percentage(val):
+    if val < 0:
+        return 0
+    if val > 100:
+        return 100
+    return val
 ```
-These two methods contain duplicate code and should be flagged.
+These two functions contain duplicate code and should be flagged.
 
 DO NOT flag:
-- Methods with different logic
+- Functions with different logic
 - Single occurrences
 - Code blocks shorter than 3 lines
 
