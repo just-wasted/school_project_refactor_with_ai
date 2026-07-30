@@ -79,8 +79,7 @@ def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
     nctx = 131072 if "gemma4" in model else 32768
     n_predict = 16384 if "gemma4" in model else 8192
     if mode == "analyze":
-        nc = '\n'.join(f"{i:4d}: {l}" for i, l in enumerate(code.split('\n'), 1))
-        p = f"Here is the COMPLETE Python file with line numbers:\n\n```\n{nc}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
+        p = f"Here is the COMPLETE Python file:\n\n```\n{code}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
         system = SYSTEM_PROMPT_ANALYZE
         payload = {"model": model, "system": system, "prompt": p, "stream": False,
                   "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}, "format": "json"}
@@ -131,6 +130,11 @@ def extract_smells(resp, full_code=""):
         else:
             parsed = {}
         smells = parsed if isinstance(parsed, list) else parsed.get("smells", [])
+        for s in smells:
+            for field in ['old_code', 'new_code', 'diff']:
+                if field in s:
+                    for m in ['```python', '```Python', '```']:
+                        s[field] = s[field].replace(m, '').strip()
         if full_code:
             fl = full_code.split('\n')
             for s in smells:
@@ -248,7 +252,7 @@ def main():
     p.add_argument("file", help="Dateipfad")
     p.add_argument("--json", action="store_true", help="JSON-Ausgabe")
     p.add_argument("--output", "-o", help="Zieldatei")
-    p.add_argument("--model", default="gemma4:e2b",
+    p.add_argument("--model", default="qwen2.5-coder:7b",
                   choices=["gemma4:e2b", "gemma4:9b", "qwen2.5-coder:7b", "qwen3-coder:30b",
                            "qwen3-coder:7b", "deepseek-coder:33b", "deepseek-coder:6.7b",
                            "devstral:24b", "magicoder:7b"], help="Modell")
