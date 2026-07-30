@@ -20,13 +20,19 @@ For detected Long Methods, refactor by extracting ONLY the identified pure busin
 ## OUTPUT FORMAT
 Return the result strictly in the following JSON format. Ensure the `new_code` contains the complete, runnable code for both the refactored main method and ALL extracted helper functions.
 
+**IMPORTANT: All code in old_code and new_code fields MUST be properly escaped for JSON:**
+- Use `\n` for newlines
+- Use `\"` for double quotes
+- Use `\\` for backslashes
+- Ensure the JSON is valid and parseable
+
 {
   "smells": [
     {
       "type": "Long Method",
       "location": {"start_line": <int>, "end_line": <int>},
-      "old_code": "<complete original method>",
-      "new_code": "<COMPLETE refactored code: main method + ALL extracted helpers>",
+      "old_code": "<complete original method, properly escaped>",
+      "new_code": "<COMPLETE refactored code: main method + ALL extracted helpers, properly escaped>",
       "reason": "<brief justification for extraction>",
       "impact": "maintainability"
     }
