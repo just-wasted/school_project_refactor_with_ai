@@ -14,6 +14,8 @@ NEVER EXTRACT: input validation checks, type checking, error handling, flow cont
 REFACTORING ACTION:
 Extract ONLY pure business logic into private helper methods (prefix with underscore). Keep original method intact for orchestration, validation, and error handling. Never change the original method signature.
 
+HARD REQUIREMENT: If you reference helper methods in the refactored code (e.g., self._helper_name), YOU MUST include their complete definitions in the new_code output. Every called helper method must be defined in the returned code.
+
 OUTPUT FORMAT:
 Return ONLY valid JSON with perfect escaping.
 
@@ -29,7 +31,7 @@ MANDATORY ESCAPING RULES:
       "location": {"start_line": <int>, "end_line": <int>},
       "description": "<brief description>",
       "old_code": "<method, escaped>",
-      "new_code": "<refactored code, escaped>",
+      "new_code": "<COMPLETE refactored code: main method + ALL helper methods defined, escaped>",
       "reason": "<justification>",
       "impact": "maintainability"
     }
