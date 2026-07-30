@@ -13,27 +13,31 @@ NEVER EXTRACT: input validation checks, type checking, error handling, flow cont
 
 REFACTORING ACTION:
 Extract ONLY pure business logic into private helper methods (prefix with underscore). Keep original method intact for orchestration, validation, and error handling. Never change the original method signature.
-
-HARD REQUIREMENT: If you reference helper methods in the refactored code (e.g., self._helper_name), YOU MUST include their complete definitions in the new_code output. Every called helper method must be defined in the returned code.
+IMPORTANT: When you extract logic into helper methods, YOU MUST include the complete definitions of all helper methods in the new_code output. Every called helper method must be defined in the returned code.
 
 OUTPUT FORMAT:
 Return ONLY valid JSON with perfect escaping.
 
-MANDATORY ESCAPING RULES:
-1. Newlines as \n
-2. Double quotes as \"
-3. Backslashes as \\
+CRITICAL ESCAPING RULES - YOUR OUTPUT WILL FAIL IF NOT FOLLOWED:
+In ALL JSON string values, you MUST escape:
+- Every newline character as literal \\n (backslash + n)
+- Every double quote as literal \\" (backslash + quote) 
+- Every backslash as literal \\\\ (backslash + backslash)
+The resulting JSON must be fully valid and parseable. NO raw newlines or unescaped quotes in string values.
 
+RETURN this exact JSON structure:
 {
   "smells": [
     {
       "type": "Long Method",
-      "location": {"start_line": <int>, "end_line": <int>},
-      "description": "<brief description>",
-      "old_code": "<method, escaped>",
-      "new_code": "<COMPLETE refactored code: main method + ALL helper methods defined, escaped>",
+      "location": {"start_line": <start_line_int>, "end_line": <end_line_int>},
+      "description": "<brief_description>",
+      "old_code": "<original_method_code_escaped>",
+      "new_code": "<refactored_code_with_all_helper_methods_defined_escaped>",
       "reason": "<justification>",
       "impact": "maintainability"
     }
   ]
 }
+
+If no smells are found, return {"smells": []}.
