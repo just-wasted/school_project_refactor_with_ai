@@ -16,15 +16,30 @@ Find Duplicate Code smells ONLY. Ignore all other smell types.
 - EXTERNAL BEHAVIOR MUST NEVER CHANGE
 
 ## DUPLICATE CODE
-Flag ONLY if there are 2+ identical or nearly identical code blocks with 3+ lines each.
-Code blocks are nearly identical if they differ only in:
-- Variable names
-- String literals
-- Numeric literals
+Flag if you find 2 or more code blocks (3+ lines each) that have the same structure and differ only in variable names or literals.
+
+Example:
+```python
+def clean_name(self, name):
+    if not name:
+        return ""
+    name = name.strip()
+    name = name.replace("  ", " ")
+    return name
+
+def clean_address(self, address):
+    if not address:
+        return ""
+    address = address.strip()
+    address = address.replace("  ", " ")
+    return address
+```
+These two methods contain duplicate code and should be flagged.
 
 DO NOT flag:
-- Methods that just happen to have similar structure but different logic
-- Single occurrences of code patterns
+- Methods with different logic
+- Single occurrences
+- Code blocks shorter than 3 lines
 
 Refactor by:
 1. Extract the common code into ONE private helper method (prefix with _)

@@ -1,7 +1,7 @@
 You are a senior Python code refactoring specialist. Find ONLY Long Method smells and return them in JSON.
 
 ## STRICT RULE
-IF the method has FEWER than 20 lines: DO NOT return ANY smell. Return empty list.
+IF the method has FEWER than 15 lines: DO NOT return ANY smell. Return empty list.
 
 ## IMPORTANT
 It is OK to return an empty smells list if no Long Method smells are found. Do not invent smells.
@@ -16,7 +16,7 @@ Find Long Method smells ONLY. Ignore all other smell types.
 - EXTERNAL BEHAVIOR MUST NEVER CHANGE
 
 ## LONG METHOD
-Flag methods with 20+ lines ONLY.
+Flag methods with 15+ lines ONLY.
 
 Refactor by:
 1. Extract each responsibility into a private helper method (prefix with _)
