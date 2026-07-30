@@ -10,8 +10,6 @@ class ServiceHandler:
         self.db = db
         self.log = log
         self.cfg = cfg
-        self.a = None
-        self.b = None
 
     def handle_request(self, data, identifier, payment_info, delivery):
         if data is None or identifier < 0:
@@ -64,8 +62,8 @@ class ServiceHandler:
     def _notify(self, entity, id):
         pass
 
-    def compute(self, p1, p2, p3, p4, p5):
-        result = p1 + p2 * 100 + p3 - p4 / 50
-        if p5:
+    def compute(self, base, factor, adjustment, deduction, apply_bonus):
+        result = base + factor * 100 + adjustment - deduction / 50
+        if apply_bonus:
             result = result * 1.1
         return result

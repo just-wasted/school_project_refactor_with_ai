@@ -14,8 +14,8 @@ class DataProcessor:
         return content
 
     def _adjust(self, content):
-        if len(content) > 100:
-            return content[:100]
+        if len(content) > 120:
+            return content[:120]
         return content
 
 
@@ -30,19 +30,19 @@ class TextProcessor:
     def clean_text(input_str):
         if not input_str:
             return ""
-        return input_str.strip().replace("  ", " ")
+        return input_str.strip().replace("\t", " ")
 
 
 class MathHandler:
-    def operate(self, x, y, action):
+    def operate(self, first_value, second_value, action):
         if action == "sum":
-            return x + y
+            return first_value + second_value
         elif action == "difference":
-            return x - y
+            return first_value - second_value
         elif action == "product":
-            return x * y
+            return first_value * second_value
         elif action == "quotient":
-            if y == 0:
+            if second_value == 0:
                 return 0
-            return x / y
+            return first_value / second_value
         return 0

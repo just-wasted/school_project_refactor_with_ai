@@ -16,11 +16,11 @@
 - [ ] Simplify complex logic
 
 ### Test File Cleanup
-- [ ] Remove smell hints from `code_smells/service.py` (variable names, comments)
-- [ ] Clean `code_smells/processor.py`
-- [ ] Clean `code_smells/utils.py`
-- [ ] Clean `code_smells/format_utils.py`
-- [ ] Ensure test files contain only neutral code descriptions
+- [x] Remove smell hints from `code_smells/service.py` (variable names, comments)
+- [x] Clean `code_smells/processor.py`
+- [x] Clean `code_smells/utils.py`
+- [x] Clean `code_smells/format_utils.py`
+- [x] Ensure test files contain only neutral code descriptions
 
 ### Prompt Verification
 - [ ] Verify analyze prompt produces valid, actionable smells
@@ -68,6 +68,3 @@
 
 3. **Line Limit Violation**: refactoring_agent.py at 328 lines (limit: 300)
    - Must reduce executable code count
-
-4. **Test File Contamination**: code_smells files contain smell hints
-   - Prevents model from finding smells organically
