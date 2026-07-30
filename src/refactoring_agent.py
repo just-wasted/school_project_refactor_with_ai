@@ -316,28 +316,33 @@ def main():
     
     # Analyze each smell type separately and aggregate results
     all_smells = []
-    print("Analyzing for each smell type...")
+    if not args.json:
+        print("Analyzing for each smell type...")
     for st in SMELL_TYPES:
-        print(f"  Checking: {st}...", end=" ", flush=True)
+        if not args.json:
+            print(f"  Checking: {st}...", end=" ", flush=True)
         try:
             result = call_ollama(code, args.model, args.temperature, mode="analyze", smell_type=st)
             smells = extract_smells(result, code)
-            if smells:
+            if smells and not args.json:
                 print(f"Found {len(smells)} smell(s)")
-            else:
+            elif not args.json:
                 print("None")
             all_smells.extend(smells)
         except Exception as e:
-            print(f"Error: {e}")
+            if not args.json:
+                print(f"Error: {e}")
     
     # Deduplicate smells
     all_smells = deduplicate_smells(all_smells)
     
     if not all_smells:
-        print("Keine Vorschläge gefunden.")
+        if not args.json:
+            print("Keine Vorschläge gefunden.")
         sys.exit(0)
     
-    print(f"Total: {len(all_smells)} unique smell(s) found.")
+    if not args.json:
+        print(f"Total: {len(all_smells)} unique smell(s) found.")
     smells = all_smells
     if not smells:
         print("Keine Vorschläge gefunden.")
