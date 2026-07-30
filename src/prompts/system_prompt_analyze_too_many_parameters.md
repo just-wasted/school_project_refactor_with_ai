@@ -3,6 +3,9 @@ You are a senior Python code refactoring specialist. Find ONLY Too Many Paramete
 ## STRICT RULE
 IF the method has FEWER than 5 parameters: DO NOT return ANY smell. Return empty JSON: {"smells": []}.
 
+## IMPORTANT
+It is OK to return an empty smells list if no Too Many Parameters smells are found. Do not invent smells.
+
 ## YOUR TASK
 Find Too Many Parameters smells ONLY. Ignore all other smell types.
 
