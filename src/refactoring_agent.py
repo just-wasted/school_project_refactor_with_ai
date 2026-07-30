@@ -170,33 +170,8 @@ def extract_smells(resp, full_code=""):
                 loc = s.get("location", {})
                 st = loc.get("start_line", 0)
                 en = loc.get("end_line", 0)
-                new_code = s.get("new_code", "")
                 if 1 <= st <= en <= len(fl):
-                    if 'class ' in new_code:
-                        method_line = fl[st-1] if st-1 < len(fl) else ""
-                        method_indent = len(method_line) - len(method_line.lstrip())
-                        class_start = st - 2
-                        while class_start >= 0:
-                            line = fl[class_start]
-                            line_indent = len(line) - len(line.lstrip())
-                            if 'class ' in line and line_indent < method_indent:
-                                break
-                            class_start -= 1
-                        if class_start < 0:
-                            class_start = 0
-                        class_end = en
-                        while class_end < len(fl):
-                            line = fl[class_end]
-                            line_indent = len(line) - len(line.lstrip()) if line.strip() else 0
-                            stripped = line.strip()
-                            if stripped.startswith('class ') and line_indent <= 0:
-                                break
-                            if stripped.startswith('def ') and line_indent <= 0:
-                                break
-                            class_end += 1
-                        s["old_code"] = '\n'.join(fl[class_start:class_end])
-                    else:
-                        s["old_code"] = '\n'.join(fl[st-1:en])
+                    s["old_code"] = '\n'.join(fl[st-1:en])
                 fix_indentation(s, full_code)
                 old = s.get("old_code", "")
                 new = s.get("new_code", "")
