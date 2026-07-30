@@ -8,10 +8,18 @@ TIMEOUT = 240
 BACKUP_DIR = "backup"
 
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
-with open(os.path.join(PROMPTS_DIR, "system_prompt_analyze.md"), "r", encoding="utf-8") as f:
-    SYSTEM_PROMPT_ANALYZE = f.read().strip()
 with open(os.path.join(PROMPTS_DIR, "system_prompt_apply.md"), "r", encoding="utf-8") as f:
     SYSTEM_PROMPT_APPLY = f.read().strip()
+
+# Smell-type specific analyze prompts
+SMELL_TYPES = ["Long Method", "Duplicate Code", "Magic Numbers", "Unclear Names", "Too Many Parameters"]
+SYSTEM_PROMPT_ANALYZE = {}
+for st in SMELL_TYPES:
+    try:
+        with open(os.path.join(PROMPTS_DIR, f"system_prompt_analyze_{st.lower().replace(' ', '_')}.md"), "r", encoding="utf-8") as f:
+            SYSTEM_PROMPT_ANALYZE[st] = f.read().strip()
+    except FileNotFoundError:
+        SYSTEM_PROMPT_ANALYZE[st] = ""
 
 
 def create_backup(fp):
@@ -75,12 +83,14 @@ def check_model(m):
         return False
 
 
-def call_ollama(code, model, temp, mode="analyze", apply_instructions=""):
+def call_ollama(code, model, temp, mode="analyze", apply_instructions="", smell_type=None):
     nctx = 131072 if "gemma4" in model else 32768
     n_predict = 16384 if "gemma4" in model else 8192
     if mode == "analyze":
         p = f"Here is the COMPLETE Python file:\n\n```\n{code}\n```\n\nAnalyze and return code smells with old_code, new_code, and diff."
-        system = SYSTEM_PROMPT_ANALYZE
+        system = SYSTEM_PROMPT_ANALYZE.get(smell_type, SYSTEM_PROMPT_ANALYZE.get(SMELL_TYPES[0], "")) if smell_type else ""
+        if not system:
+            system = "You are a senior Python code refactoring specialist. Find code smells and return them in JSON."
         payload = {"model": model, "system": system, "prompt": p, "stream": False,
                   "options": {"temperature": temp, "top_p": 0.9, "num_ctx": nctx, "num_predict": n_predict}, "format": "json"}
     else:
@@ -116,6 +126,19 @@ def fix_truncated_json(t):
 
 def generate_diff(old_code, new_code):
     return '\n'.join(difflib.unified_diff(old_code.split('\n'), new_code.split('\n'), lineterm=''))
+
+
+def deduplicate_smells(smells):
+    """Remove duplicate smells based on type and location."""
+    seen = set()
+    unique = []
+    for s in smells:
+        loc = s.get("location", {})
+        key = (s.get("type", ""), loc.get("start_line", 0), loc.get("end_line", 0))
+        if key not in seen:
+            seen.add(key)
+            unique.append(s)
+    return unique
 
 
 def extract_smells(resp, full_code=""):
@@ -271,12 +294,32 @@ def main():
         sys.exit(1)
     if not check_model(args.model):
         print(f"Warnung: Modell '{args.model}' nicht verfügbar.", file=sys.stderr)
-    try:
-        result = call_ollama(code, args.model, args.temperature, mode="analyze")
-    except Exception as e:
-        print(f"API-Fehler: {e}", file=sys.stderr)
-        sys.exit(1)
-    smells = extract_smells(result, code)
+    
+    # Analyze each smell type separately and aggregate results
+    all_smells = []
+    print("Analyzing for each smell type...")
+    for st in SMELL_TYPES:
+        print(f"  Checking: {st}...", end=" ", flush=True)
+        try:
+            result = call_ollama(code, args.model, args.temperature, mode="analyze", smell_type=st)
+            smells = extract_smells(result, code)
+            if smells:
+                print(f"Found {len(smells)} smell(s)")
+            else:
+                print("None")
+            all_smells.extend(smells)
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    # Deduplicate smells
+    all_smells = deduplicate_smells(all_smells)
+    
+    if not all_smells:
+        print("Keine Vorschläge gefunden.")
+        sys.exit(0)
+    
+    print(f"Total: {len(all_smells)} unique smell(s) found.")
+    smells = all_smells
     if not smells:
         print("Keine Vorschläge gefunden.")
         sys.exit(0)
