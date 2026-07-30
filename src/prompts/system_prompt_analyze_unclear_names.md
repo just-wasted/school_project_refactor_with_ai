@@ -37,6 +37,7 @@ MANDATORY ESCAPING RULES:
     {
       "type": "Unclear Names",
       "location": {"start_line": <int>, "end_line": <int>},
+      "description": "<brief description of the smell>",
       "old_code": "<complete original code, properly escaped>",
       "new_code": "<COMPLETE refactored code: renamed variables/functions throughout the file, properly escaped>",
       "reason": "<brief justification for renaming>",

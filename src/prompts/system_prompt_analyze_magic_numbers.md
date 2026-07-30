@@ -33,6 +33,7 @@ MANDATORY ESCAPING RULES:
     {
       "type": "Magic Numbers",
       "location": {"start_line": <int>, "end_line": <int>},
+      "description": "<brief description of the smell>",
       "old_code": "<complete original code, properly escaped>",
       "new_code": "<COMPLETE refactored code: main method + ALL defined constants, properly escaped>",
       "reason": "<brief justification for extraction>",

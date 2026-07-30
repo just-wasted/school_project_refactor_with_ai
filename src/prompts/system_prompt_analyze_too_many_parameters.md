@@ -37,6 +37,7 @@ MANDATORY ESCAPING RULES:
     {
       "type": "Too Many Parameters",
       "location": {"start_line": <int>, "end_line": <int>},
+      "description": "<brief description of the smell>",
       "old_code": "<complete original code, properly escaped>",
       "new_code": "<COMPLETE refactored code: main method + ALL extracted structures/helpers, properly escaped>",
       "reason": "<brief justification for extraction>",
