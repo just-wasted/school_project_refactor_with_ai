@@ -2,10 +2,10 @@
 
 ## Current State
 - Refactoring agent: 333 lines (exceeds 300 HARD LIMIT)
-- System prompts: analyze + apply phases implemented
+- System prompts: analyze + apply phases implemented (shortened from 88/108 to ~45/50 lines)
 - Tests: unit tests + system tests available
 - Documentation: README.md, AGENTS.md present
-- Model: qwen2.5-coder:7b as default
+- Model: gemma4:e2b as default (restored)
 
 ## High Priority
 

@@ -252,7 +252,7 @@ def main():
     p.add_argument("file", help="Dateipfad")
     p.add_argument("--json", action="store_true", help="JSON-Ausgabe")
     p.add_argument("--output", "-o", help="Zieldatei")
-    p.add_argument("--model", default="qwen2.5-coder:7b",
+    p.add_argument("--model", default="gemma4:e2b",
                   choices=["gemma4:e2b", "gemma4:9b", "qwen2.5-coder:7b", "qwen3-coder:30b",
                            "qwen3-coder:7b", "deepseek-coder:33b", "deepseek-coder:6.7b",
                            "devstral:24b", "magicoder:7b"], help="Modell")
