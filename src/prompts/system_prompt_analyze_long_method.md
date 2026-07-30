@@ -18,13 +18,12 @@ You are only permitted to extract **pure business logic**, object creation, or r
 For detected Long Methods, refactor by extracting ONLY the identified pure business logic into separate helper functions or classes. The original method MUST remain intact to handle all orchestration, input validation, and error handling.
 
 ## OUTPUT FORMAT
-Return the result strictly in the following JSON format. Ensure the `new_code` contains the complete, runnable code for both the refactored main method and ALL extracted helper functions.
+Return the result strictly in the following JSON format. The code within all string fields (`old_code` and `new_code`) MUST be perfectly escaped to ensure valid JSON parsing.
 
-**IMPORTANT: All code in old_code and new_code fields MUST be properly escaped for JSON:**
-- Use `\n` for newlines
-- Use `\"` for double quotes
-- Use `\\` for backslashes
-- Ensure the JSON is valid and parseable
+**MANDATORY ESCAPING RULES:**
+1. All newlines must be represented as `\n`.
+2. All double quotes must be represented as `\"`.
+3. All backslashes must be represented as `\\`.
 
 {
   "smells": [
