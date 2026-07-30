@@ -21,6 +21,7 @@
 - [x] Clean `code_smells/utils.py`
 - [x] Clean `code_smells/format_utils.py`
 - [x] Ensure test files contain only neutral code descriptions
+- [x] Add neutral test files: data_cleaner.py, discount_calculator.py, order_processor.py
 
 ### Prompt Verification
 - [ ] Verify analyze prompt produces valid, actionable smells
