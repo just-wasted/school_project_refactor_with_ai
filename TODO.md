@@ -1,16 +1,16 @@
 # TODO List - Refactoring Agent
 
 ## Current State
-- Refactoring agent: 328 lines (exceeds 300 HARD LIMIT)
+- Refactoring agent: 333 lines (exceeds 300 HARD LIMIT)
 - System prompts: analyze + apply phases implemented
 - Tests: unit tests + system tests available
 - Documentation: README.md, AGENTS.md present
-- Model: gemma4:e2b as default
+- Model: qwen2.5-coder:7b as default
 
 ## High Priority
 
-### Code Reduction (HARD LIMIT: 300 lines executable code)
-- [ ] Reduce `src/refactoring_agent.py` from 328 to <=300 lines
+### Code Reduction (LOW PRIORITY - User: not important right now)
+- [ ] Reduce `src/refactoring_agent.py` from 333 to <=300 lines
 - [ ] Move helper functions to separate module if needed
 - [ ] Remove redundant code
 - [ ] Simplify complex logic
