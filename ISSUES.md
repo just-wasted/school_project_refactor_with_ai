@@ -9,13 +9,13 @@
 
 | Category | Rating | Notes |
 |----------|--------|-------|
-| **Modularity** |  | Clear function separation |
-| **Error Handling** |  | Good try-except coverage |
-| **Backup Mechanism** |  | Automatic with read-only permissions |
-| **Syntax Validation** |  | py_compile + pyflakes checks |
-| **Configuration** |  | Model selection, temperature, timeout configurable |
-| **User Experience** |  | Interactive mode with clear prompts |
-| **Overall** |  | **4/5 - Good foundation, critical issues remain** |
+| **Modularity** | ***** | Clear function separation |
+| **Error Handling** | **** | Good try-except coverage |
+| **Backup Mechanism** | ***** | Automatic with read-only permissions |
+| **Syntax Validation** | **** | py_compile + pyflakes checks |
+| **Configuration** | **** | Model selection, temperature, timeout configurable |
+| **User Experience** | **** | Interactive mode with clear prompts |
+| **Overall** | **** | **4/5 - Good foundation, critical issues remain** |
 
 ---
 
@@ -351,18 +351,18 @@ subprocess.Popen(["bat", ...])
 
 | Priority | Issue | Location | Impact | Status |
 |----------|-------|----------|--------|--------|
-|  CRITICAL | JSON Parsing Fragile | extract_smells | Smells lost | Open |
-|  CRITICAL | fix_truncated_json Incomplete | fix_truncated_json | JSON truncation fails | Open |
-|  CRITICAL | Response Format Inconsistent | call_ollama | Parsing problems | Open |
-|  HIGH | old_code Extraction Overrides | extract_smells | Wrong code | Open |
-|  HIGH | Unnecessary JSON Parsing | apply_refactoring | Complexity | Open |
-|  HIGH | Indentation Assumptions | fix_indentation | Syntax errors | Open |
-|  HIGH | Incomplete Deduplication | deduplicate_smells | Smells lost | Open |
-|  MEDIUM | n_predict for Long Method | call_ollama | Timeout risk | Open |
-|  LOW | Path Calculation Complex | create_backup | Maintenance | Open |
-|  LOW | Temporary File Leak | verify_syntax | Resource leak | Open |
-|  LOW | External bat Dependency | display_with_bat | Portability | Open |
-|  LOW | Redundant API Calls | check_ollama/check_model | Performance | Open |
+| CRITICAL | JSON Parsing Fragile | extract_smells | Smells lost | Open |
+| CRITICAL | fix_truncated_json Incomplete | fix_truncated_json | JSON truncation fails | Open |
+| CRITICAL | Response Format Inconsistent | call_ollama | Parsing problems | Open |
+| HIGH | old_code Extraction Overrides | extract_smells | Wrong code | Open |
+| HIGH | Unnecessary JSON Parsing | apply_refactoring | Complexity | Open |
+| HIGH | Indentation Assumptions | fix_indentation | Syntax errors | Open |
+| HIGH | Incomplete Deduplication | deduplicate_smells | Smells lost | Open |
+| MEDIUM | n_predict for Long Method | call_ollama | Timeout risk | Open |
+| LOW | Path Calculation Complex | create_backup | Maintenance | Open |
+| LOW | Temporary File Leak | verify_syntax | Resource leak | Open |
+| LOW | External bat Dependency | display_with_bat | Portability | Open |
+| LOW | Redundant API Calls | check_ollama/check_model | Performance | Open |
 
 ---
 
