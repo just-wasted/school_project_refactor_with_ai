@@ -50,7 +50,7 @@ def display_with_bat(text, lang="python"):
                             f"--language={lang}"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            stderr=subprocess.PIPE, text=True)
         out, _ = p.communicate(input=text, timeout=5)
-        print(out if p.returncode == 0 else text, end='')
+        print(out if p.returncode == 0 else text)
     except:
         print(text)
 
